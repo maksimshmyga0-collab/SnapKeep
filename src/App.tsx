@@ -201,7 +201,7 @@ export default function App() {
   return (
     <div
       id="snapkeep-app-root"
-      className="w-full min-h-[100dvh] h-[100dvh] bg-[#111214] matte-graphite-bg text-[#F2F3F5] flex flex-col overflow-hidden select-none"
+      className="w-full min-h-[100dvh] h-[100dvh] bg-[#090A0C] matte-graphite-bg text-[#F2F3F5] flex flex-col overflow-hidden select-none"
       style={{
         fontFamily: 'var(--font-sans)',
       }}

@@ -11,7 +11,7 @@
     min-height: 100dvh;
     margin: 0;
     padding: 0;
-    background-color: #111214;
+    background-color: #090A0C;
     color: #F2F3F5;
     font-family: var(--font-sans);
     font-weight: 400;
@@ -28,7 +28,7 @@
 
 /* Pure dark graphite background without textures or image assets */
 .matte-graphite-bg {
-  background-color: #111214;
+  background-color: #090A0C;
 }
 
 /* Matte graphite tile with soft, subtle white reflection from above */

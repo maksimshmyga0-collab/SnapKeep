@@ -84,8 +84,8 @@ export const initTelegramApp = () => {
     if (tg) {
       tg.ready();
       tg.expand?.();
-      tg.setHeaderColor?.('#0C0D10');
-      tg.setBackgroundColor?.('#0C0D10');
+      tg.setHeaderColor?.('#090A0C');
+      tg.setBackgroundColor?.('#090A0C');
     }
   } catch (e) {
     console.warn('Telegram WebApp init ignored in non-TG environment:', e);

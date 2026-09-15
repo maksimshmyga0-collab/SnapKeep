@@ -25,8 +25,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       aria-label="Основная навигация"
       className="w-full shrink-0 select-none z-30"
       style={{
-        backgroundColor: '#0C0D10',
-        borderTop: '1px solid rgba(255, 255, 255, 0.075)',
+        backgroundColor: 'transparent',
         paddingTop: '10px',
         paddingBottom: 'calc(14px + env(safe-area-inset-bottom, 0px))',
         paddingLeft: '16px',

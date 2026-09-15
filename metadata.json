@@ -1,0 +1,6 @@
+{
+  "name": "SnapKeep",
+  "description": "Personal knowledge vault Telegram Mini App — Save it, find it, use it.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

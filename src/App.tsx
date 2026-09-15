@@ -9,6 +9,7 @@ import { SaveLinkSheet } from './components/SaveLinkSheet';
 import { SaveNoteSheet } from './components/SaveNoteSheet';
 import { ItemDetailSheet } from './components/ItemDetailSheet';
 import { Toast } from './components/Toast';
+import { DistortedGrid } from './components/DistortedGrid';
 
 const STORAGE_KEY_ITEMS = 'snapkeep_user_saved_items_v3';
 
@@ -210,6 +211,9 @@ export default function App() {
 
       {/* Full-screen Container */}
       <div className="w-full max-w-md mx-auto flex-1 flex flex-col overflow-hidden relative">
+        {/* Organic Distorted Grid at Top with Vertical Fade */}
+        <DistortedGrid />
+
         {/* VIEW 1: HOME */}
         {activeTab === 'HOME' && (
           <HomeView

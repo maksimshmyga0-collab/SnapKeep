@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { CategoryName, SavedItem } from '../types';
 import { CATEGORIES } from '../data/initialData';
 import { triggerHaptic } from '../services/telegram';
@@ -31,43 +31,74 @@ export const HomeView: React.FC<HomeViewProps> = ({
 }) => {
   // Detected clipboard link state
   const [detectedClipboardUrl, setDetectedClipboardUrl] = useState<string | null>(null);
+  const lastSavedUrlRef = useRef<string | null>(null);
 
   // Check clipboard safely without throwing errors or showing alerts
   const checkClipboard = useCallback(async () => {
-    const validUrl = await readClipboardUrlSafely();
-    setDetectedClipboardUrl(validUrl);
+    try {
+      const validUrl = await readClipboardUrlSafely();
+      // If user just saved this exact URL in this session, don't re-show the hint
+      if (validUrl && validUrl === lastSavedUrlRef.current) {
+        return;
+      }
+      setDetectedClipboardUrl(validUrl);
+    } catch {
+      // Handled silently
+    }
   }, []);
 
-  // Check clipboard on mount and when returning to window/tab
+  // Check clipboard:
+  // 1. When Home is opened/mounted
+  // 2. When returning to window/tab (focus, visibilitychange)
+  // 3. On initial touch/pointerdown (user interaction unlocks browser clipboard permissions)
   useEffect(() => {
     checkClipboard();
 
+    // Secondary checks in case browser document focus was established shortly after mount
+    const timer1 = setTimeout(checkClipboard, 350);
+    const timer2 = setTimeout(checkClipboard, 900);
+
     const handleFocus = () => {
       checkClipboard();
+      setTimeout(checkClipboard, 150);
     };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         checkClipboard();
+        setTimeout(checkClipboard, 150);
       }
+    };
+
+    const handlePointerDown = () => {
+      checkClipboard();
     };
 
     window.addEventListener('focus', handleFocus);
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pointerdown', handlePointerDown, { passive: true });
 
     return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pointerdown', handlePointerDown);
     };
   }, [checkClipboard]);
 
   // Main Save button handler
   const handleMainSaveClick = async () => {
-    let urlToSave = detectedClipboardUrl;
-
-    // Direct check right before saving
-    if (!urlToSave) {
+    // Check clipboard directly on tap (highest privilege user gesture)
+    let urlToSave: string | null = null;
+    try {
       urlToSave = await readClipboardUrlSafely();
+    } catch {
+      // Safe fallback
+    }
+
+    if (!urlToSave) {
+      urlToSave = detectedClipboardUrl;
     }
 
     // If a valid URL is found in clipboard:
@@ -85,9 +116,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
       // Automatically save the clipboard URL into "Разное"
       triggerHaptic('success');
+      lastSavedUrlRef.current = urlToSave;
       onSaveClipboardLink(urlToSave);
       setDetectedClipboardUrl(null);
-      onShowToast('Ссылка сохранена');
+      onShowToast('Сохранено');
       return;
     }
 
@@ -99,22 +131,38 @@ export const HomeView: React.FC<HomeViewProps> = ({
   return (
     <div
       id="screen-home"
-      className="relative flex-1 w-full flex flex-col justify-between px-5 pt-[48px] pb-6 select-none overflow-hidden"
+      className="relative flex-1 w-full flex flex-col justify-between px-5 pt-[70px] pb-[44px] select-none overflow-hidden"
     >
-      {/* Delicate Technical Square Grid (Top 35–40%, gentle fade downward) */}
-      <div
-        className="top-subtle-grid"
-        aria-hidden="true"
-      />
-
-      {/* 1. Upper Group: Brand, Statistics & Search */}
+      {/* 1. Upper Group: Brand, Statistics & Search (moved slightly down towards bubbles) */}
       <div className="relative z-10 flex flex-col gap-5">
         {/* Brand & Stats */}
         <div>
-          <div className="mb-1.5">
+          <div className="mb-2 flex items-center gap-2">
+            {/* SnapKeep Logo: static circular loading-indicator symbol */}
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#F2F3F5"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0"
+              aria-hidden="true"
+            >
+              <line x1="12" y1="2.5" x2="12" y2="6.5" />
+              <line x1="12" y1="17.5" x2="12" y2="21.5" />
+              <line x1="5.28" y1="5.28" x2="8.11" y2="8.11" />
+              <line x1="15.89" y1="15.89" x2="18.72" y2="18.72" />
+              <line x1="2.5" y1="12" x2="6.5" y2="12" />
+              <line x1="17.5" y1="12" x2="21.5" y2="12" />
+              <line x1="5.28" y1="18.72" x2="8.11" y2="15.89" />
+              <line x1="15.89" y1="8.11" x2="18.72" y2="5.28" />
+            </svg>
             <span
-              className="text-[#6C717A] tracking-normal font-normal"
-              style={{ fontSize: '13px', lineHeight: '16px' }}
+              className="text-[#F2F3F5] font-medium tracking-tight"
+              style={{ fontSize: '16px', lineHeight: '20px', letterSpacing: '-0.01em' }}
             >
               SnapKeep
             </span>
@@ -169,8 +217,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </button>
       </div>
 
-      {/* 2. Middle Group: Category Chips (Matte surfaces with subtle highlights) */}
-      <div className="relative z-10 my-auto py-3">
+      {/* 2. Middle Group: Category Chips (Remains centered in its current position) */}
+      <div className="relative z-10 my-auto py-2">
         <div className="flex flex-wrap gap-[7px]">
           {CATEGORIES.map((cat) => {
             const count = categoryCounts[cat] || 0;
@@ -203,8 +251,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </div>
 
-      {/* 3. Lower Group: Main Save Action & Secondary Buttons */}
-      <div className="relative z-10 flex flex-col gap-3 pb-1">
+      {/* 3. Lower Group: Main Save Action & Secondary Buttons (moved slightly up towards bubbles) */}
+      <div className="relative z-10 flex flex-col gap-3">
         {/* Main Save Action Container */}
         <div className="flex flex-col gap-1.5">
           <button

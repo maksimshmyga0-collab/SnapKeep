@@ -2,6 +2,7 @@ import React from 'react';
 import { CategoryName, SavedItem } from '../types';
 import { CATEGORIES } from '../data/initialData';
 import { triggerHaptic } from '../services/telegram';
+import { BottomSheet } from './BottomSheet';
 
 interface ItemDetailSheetProps {
   item: SavedItem | null;
@@ -59,71 +60,36 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
   };
 
   return (
-    <div
+    <BottomSheet
+      isOpen={Boolean(item)}
+      onClose={onClose}
       id="item-detail-sheet-backdrop"
-      className="fixed inset-0 z-50 flex items-end justify-center"
-      style={{
-        backgroundColor: 'rgba(0, 0, 0, 0.7)',
-        backdropFilter: 'blur(3px)',
-      }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          triggerHaptic('light');
-          onClose();
-        }
-      }}
+      panelId="item-detail-sheet-panel"
     >
-      <div
-        id="item-detail-sheet-panel"
-        className="w-full max-w-md flex flex-col animate-in fade-in slide-in-from-bottom duration-200 matte-sheet-panel"
-        style={{
-          borderTopLeftRadius: '24px',
-          borderTopRightRadius: '24px',
-          borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-          borderLeft: '1px solid rgba(255, 255, 255, 0.06)',
-          borderRight: '1px solid rgba(255, 255, 255, 0.06)',
-          paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
-          paddingTop: '12px',
-          paddingLeft: '20px',
-          paddingRight: '20px',
-        }}
-      >
-        {/* Drag Handle */}
-        <div className="flex justify-center mb-3">
-          <div
-            className="rounded-full"
-            style={{
-              width: '36px',
-              height: '4px',
-              backgroundColor: 'rgba(255, 255, 255, 0.22)',
-            }}
-          />
-        </div>
-
-        {/* Header Row */}
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-[12px] text-[#6C717A] font-normal">
-            Источник: {item.sourceLabel}
-          </span>
-          <button
-            id="close-item-detail-sheet"
-            type="button"
-            onClick={() => {
-              triggerHaptic('light');
-              onClose();
-            }}
-            aria-label="Закрыть"
-            className="w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-colors matte-tile"
-            style={{
-              color: '#8E939C',
-            }}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
+      {/* Header Row */}
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[12px] text-[#6C717A] font-normal">
+          Источник: {item.sourceLabel}
+        </span>
+        <button
+          id="close-item-detail-sheet"
+          type="button"
+          onClick={() => {
+            triggerHaptic('light');
+            onClose();
+          }}
+          aria-label="Закрыть"
+          className="w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-colors matte-tile"
+          style={{
+            color: '#8E939C',
+          }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
 
         {/* Title */}
         <h3 className="text-[16px] text-[#F2F3F5] font-medium leading-snug mb-3">
@@ -225,7 +191,6 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
             </svg>
           </button>
         </div>
-      </div>
-    </div>
+    </BottomSheet>
   );
 };

@@ -39,10 +39,39 @@ declare global {
           onClick: (callback: () => void) => void;
           offClick: (callback: () => void) => void;
         };
+        readTextFromClipboard?: (callback: (text: string) => void) => void;
       };
     };
   }
 }
+
+export const readTelegramClipboardText = (): Promise<string | null> => {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined' || !window.Telegram?.WebApp?.readTextFromClipboard) {
+      resolve(null);
+      return;
+    }
+    try {
+      let resolved = false;
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          resolve(null);
+        }
+      }, 600);
+
+      window.Telegram.WebApp.readTextFromClipboard((text: string) => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          resolve(typeof text === 'string' && text.trim().length > 0 ? text : null);
+        }
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+};
 
 export const isTelegramEnvironment = (): boolean => {
   return typeof window !== 'undefined' && Boolean(window.Telegram?.WebApp?.initDataUnsafe?.user || window.Telegram?.WebApp?.ready);

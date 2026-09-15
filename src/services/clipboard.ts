@@ -1,17 +1,25 @@
-/**
- * Clipboard detection and URL extraction utilities
- */
+import { readTelegramClipboardText } from './telegram';
 
 /**
  * Validates whether a string is a standard URL.
  * Supports http://, https://, and www. links.
- * Ignores plain text.
+ * Strictly ignores plain text.
  */
 export function extractValidUrl(text: string | null | undefined): string | null {
   if (!text) return null;
-  const trimmed = text.trim();
+  let trimmed = text.trim();
 
-  // Basic sanity check: no spaces and must look like a URL
+  // Strip accidental outer quotes or angle brackets commonly added by messengers
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+    (trimmed.startsWith('<') && trimmed.endsWith('>')) ||
+    (trimmed.startsWith('(') && trimmed.endsWith(')'))
+  ) {
+    trimmed = trimmed.slice(1, -1).trim();
+  }
+
+  // Must not have internal spaces in a valid URL
   if (/\s/.test(trimmed)) return null;
 
   // Must start with http://, https://, or www.
@@ -20,44 +28,61 @@ export function extractValidUrl(text: string | null | undefined): string | null 
     return null;
   }
 
-  // General URL validation
+  // Prepend protocol if starting with www.
+  const withProtocol = /^www\./i.test(trimmed) ? `https://${trimmed}` : trimmed;
+
   try {
-    const withProtocol = trimmed.startsWith('www.') ? `https://${trimmed}` : trimmed;
     const parsed = new URL(withProtocol);
-    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      // Must have a valid hostname with at least one dot
-      if (parsed.hostname && parsed.hostname.includes('.')) {
-        return withProtocol;
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+
+    // Must have a valid hostname with at least one dot or be localhost
+    const host = parsed.hostname;
+    if (!host || host.endsWith('.')) {
+      return null;
+    }
+
+    if (host !== 'localhost') {
+      const parts = host.split('.');
+      if (parts.length < 2 || parts.some((p) => p.length === 0)) {
+        return null;
+      }
+      const tld = parts[parts.length - 1];
+      if (tld.length < 2 && !/^\d+$/.test(tld)) {
+        return null;
       }
     }
+
+    return withProtocol;
   } catch {
     return null;
   }
-
-  return null;
 }
 
 /**
- * Formats a URL for compact display under the Save button.
+ * Formats a URL for compact single-line display under the Save button.
  * Example: "youtube.com/watch..." or "instagram.com/p/..."
  */
 export function formatShortUrl(urlStr: string): string {
   try {
-    const parsed = new URL(urlStr);
-    const host = parsed.hostname.replace(/^www\./, '');
+    const withProto = /^www\./i.test(urlStr.trim()) ? `https://${urlStr.trim()}` : urlStr.trim();
+    const parsed = new URL(withProto);
+    const host = parsed.hostname.replace(/^www\./i, '');
     const pathname = parsed.pathname === '/' ? '' : parsed.pathname;
-    const search = parsed.search ? parsed.search : '';
+    const search = parsed.search || '';
 
-    let combined = host + pathname + search;
-    if (combined.length > 26) {
-      return combined.slice(0, 24) + '...';
+    const combined = host + pathname + search;
+    if (combined.length > 28) {
+      return combined.slice(0, 26) + '...';
     }
     return combined;
   } catch {
-    if (urlStr.length > 26) {
-      return urlStr.slice(0, 24) + '...';
+    const clean = urlStr.replace(/^https?:\/\//i, '').replace(/^www\./i, '');
+    if (clean.length > 28) {
+      return clean.slice(0, 26) + '...';
     }
-    return urlStr;
+    return clean;
   }
 }
 
@@ -67,28 +92,51 @@ export function formatShortUrl(urlStr: string): string {
 export function normalizeUrl(url: string | undefined): string {
   if (!url) return '';
   try {
-    const trimmed = url.trim().replace(/\/+$/, '');
-    const withProto = trimmed.startsWith('www.') ? `https://${trimmed}` : trimmed;
-    const parsed = new URL(withProto);
-    return `${parsed.protocol}//${parsed.hostname.toLowerCase()}${parsed.pathname.replace(/\/+$/, '')}${parsed.search}`;
+    let trimmed = url.trim().replace(/\/+$/, '');
+    if (/^www\./i.test(trimmed)) {
+      trimmed = `https://${trimmed}`;
+    }
+    const parsed = new URL(trimmed);
+    const protocol = parsed.protocol.toLowerCase();
+    const hostname = parsed.hostname.toLowerCase().replace(/^www\./, '');
+    const pathname = parsed.pathname.replace(/\/+$/, '');
+    const search = parsed.search || '';
+    return `${protocol}//${hostname}${pathname}${search}`;
   } catch {
-    return url.trim().toLowerCase().replace(/\/+$/, '');
+    return url
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//i, '')
+      .replace(/^www\./i, '')
+      .replace(/\/+$/, '');
   }
 }
 
 /**
- * Reads clipboard safely without throwing errors or breaking UI.
+ * Reads clipboard safely using standard browser Clipboard API,
+ * with Telegram WebApp bridge fallback. Never throws or crashes.
  */
 export async function readClipboardUrlSafely(): Promise<string | null> {
-  if (typeof navigator === 'undefined' || !navigator.clipboard?.readText) {
-    return null;
+  // 1. First attempt standard browser Clipboard API
+  if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
+    try {
+      const text = await navigator.clipboard.readText();
+      const valid = extractValidUrl(text);
+      if (valid) return valid;
+    } catch {
+      // Permission denied or document not focused in iframe - handled silently
+    }
   }
 
+  // 2. Telegram WebApp bridge fallback (for Telegram Mini App environment)
   try {
-    const text = await navigator.clipboard.readText();
-    return extractValidUrl(text);
+    const tgText = await readTelegramClipboardText();
+    const validTg = extractValidUrl(tgText);
+    if (validTg) return validTg;
   } catch {
-    // Return null silently if user denied permission or if API is unavailable
-    return null;
+    // Handled silently
   }
+
+  return null;
 }
+

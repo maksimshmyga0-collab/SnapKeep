@@ -1,34 +1,114 @@
-import React from 'react';
-import { CategoryName } from '../types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { CategoryName, SavedItem } from '../types';
 import { CATEGORIES } from '../data/initialData';
 import { triggerHaptic } from '../services/telegram';
+import { readClipboardUrlSafely, formatShortUrl, normalizeUrl } from '../services/clipboard';
 
 interface HomeViewProps {
   totalSaved: number;
   todayCount: number;
   categoryCounts: Record<CategoryName, number>;
+  savedItems: SavedItem[];
   onOpenSearch: () => void;
   onSelectCategory: (category: CategoryName) => void;
   onOpenSaveLink: () => void;
   onOpenSaveNote: () => void;
+  onSaveClipboardLink: (url: string) => void;
+  onShowToast: (message: string) => void;
 }
 
 export const HomeView: React.FC<HomeViewProps> = ({
   totalSaved,
   todayCount,
   categoryCounts,
+  savedItems,
   onOpenSearch,
   onSelectCategory,
   onOpenSaveLink,
   onOpenSaveNote,
+  onSaveClipboardLink,
+  onShowToast,
 }) => {
+  // Detected clipboard link state
+  const [detectedClipboardUrl, setDetectedClipboardUrl] = useState<string | null>(null);
+
+  // Check clipboard safely without throwing errors or showing alerts
+  const checkClipboard = useCallback(async () => {
+    const validUrl = await readClipboardUrlSafely();
+    setDetectedClipboardUrl(validUrl);
+  }, []);
+
+  // Check clipboard on mount and when returning to window/tab
+  useEffect(() => {
+    checkClipboard();
+
+    const handleFocus = () => {
+      checkClipboard();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkClipboard();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [checkClipboard]);
+
+  // Main Save button handler
+  const handleMainSaveClick = async () => {
+    let urlToSave = detectedClipboardUrl;
+
+    // Direct check right before saving
+    if (!urlToSave) {
+      urlToSave = await readClipboardUrlSafely();
+    }
+
+    // If a valid URL is found in clipboard:
+    if (urlToSave) {
+      // Check for duplicates
+      const isDuplicate = savedItems.some(
+        (item) => item.url && normalizeUrl(item.url) === normalizeUrl(urlToSave!)
+      );
+
+      if (isDuplicate) {
+        triggerHaptic('medium');
+        onShowToast('Эта ссылка уже сохранена');
+        return;
+      }
+
+      // Automatically save the clipboard URL into "Разное"
+      triggerHaptic('success');
+      onSaveClipboardLink(urlToSave);
+      setDetectedClipboardUrl(null);
+      onShowToast('Ссылка сохранена');
+      return;
+    }
+
+    // Fallback: If no URL in clipboard, open the standard Save Link modal
+    triggerHaptic('medium');
+    onOpenSaveLink();
+  };
+
   return (
     <div
       id="screen-home"
-      className="flex-1 w-full flex flex-col justify-between px-5 pt-[48px] pb-6 select-none overflow-hidden"
+      className="relative flex-1 w-full flex flex-col justify-between px-5 pt-[48px] pb-6 select-none overflow-hidden"
     >
-      {/* 1. Upper Group: Brand, Statistics & Search (lowered by ~20px) */}
-      <div className="flex flex-col gap-5">
+      {/* Delicate Technical Square Grid (Top 35–40%, gentle fade downward) */}
+      <div
+        className="top-subtle-grid"
+        aria-hidden="true"
+      />
+
+      {/* 1. Upper Group: Brand, Statistics & Search */}
+      <div className="relative z-10 flex flex-col gap-5">
         {/* Brand & Stats */}
         <div>
           <div className="mb-1.5">
@@ -56,7 +136,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
         </div>
 
-        {/* Full-width Search Trigger Button */}
+        {/* Full-width Search Trigger Button (Matte tile with soft specular reflection) */}
         <button
           id="home-search-trigger"
           type="button"
@@ -64,11 +144,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             triggerHaptic('light');
             onOpenSearch();
           }}
-          className="w-full rounded-[18px] py-3.5 px-4 flex items-center gap-3 cursor-pointer text-left transition-colors"
-          style={{
-            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-            border: '1px solid rgba(255, 255, 255, 0.09)',
-          }}
+          className="w-full rounded-[18px] py-3.5 px-4 flex items-center gap-3 cursor-pointer text-left transition-all active:opacity-85 matte-tile"
         >
           <svg
             width="19"
@@ -93,8 +169,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </button>
       </div>
 
-      {/* 2. Middle Group: Compact Category Chips */}
-      <div className="my-auto py-3">
+      {/* 2. Middle Group: Category Chips (Matte surfaces with subtle highlights) */}
+      <div className="relative z-10 my-auto py-3">
         <div className="flex flex-wrap gap-[7px]">
           {CATEGORIES.map((cat) => {
             const count = categoryCounts[cat] || 0;
@@ -107,11 +183,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   triggerHaptic('selection');
                   onSelectCategory(cat);
                 }}
-                className="rounded-[20px] px-3.5 py-1.5 flex items-center gap-1.5 cursor-pointer transition-all active:scale-[0.98]"
-                style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.09)',
-                }}
+                className="rounded-[20px] px-4 py-2 min-h-[34px] flex items-center gap-1.5 cursor-pointer transition-all active:scale-[0.98] matte-chip"
               >
                 <span
                   className="text-[#C3C8D0] font-normal"
@@ -131,42 +203,51 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </div>
 
-      {/* 3. Lower Group: Main Save Action & Secondary Buttons (lifted upward) */}
-      <div className="flex flex-col gap-3 pb-1">
-        {/* Main Save Action (Prominent primary touch target) */}
-        <button
-          id="main-save-action-button"
-          type="button"
-          onClick={() => {
-            triggerHaptic('medium');
-            onOpenSaveLink();
-          }}
-          className="w-full h-[54px] rounded-[18px] flex items-center justify-center gap-2 cursor-pointer font-medium transition-opacity active:opacity-85 shadow-sm"
-          style={{
-            backgroundColor: 'rgba(90, 109, 166, 0.22)',
-            border: '1px solid rgba(140, 157, 214, 0.28)',
-            color: '#E4E8F2',
-            fontSize: '15px',
-            lineHeight: '20px',
-          }}
-        >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+      {/* 3. Lower Group: Main Save Action & Secondary Buttons */}
+      <div className="relative z-10 flex flex-col gap-3 pb-1">
+        {/* Main Save Action Container */}
+        <div className="flex flex-col gap-1.5">
+          <button
+            id="main-save-action-button"
+            type="button"
+            onClick={handleMainSaveClick}
+            className="w-full h-[60px] rounded-[18px] flex items-center justify-center gap-2 cursor-pointer font-medium snap-main-save-button"
+            style={{
+              color: '#111214',
+              fontSize: '15px',
+              lineHeight: '20px',
+            }}
           >
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          <span>Сохранить</span>
-        </button>
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#111214"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span>Сохранить</span>
+          </button>
 
-        {/* Secondary actions: Ссылка & Заметка (elevated touch target) */}
+          {/* Compact string under "Сохранить" shown only when clipboard contains a link */}
+          {detectedClipboardUrl && (
+            <div className="text-center pt-0.5 animate-in fade-in duration-200">
+              <span
+                className="text-[#8E939C] font-normal truncate block max-w-full px-2"
+                style={{ fontSize: '12px', lineHeight: '15px' }}
+              >
+                Из буфера: {formatShortUrl(detectedClipboardUrl)}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Secondary actions: Ссылка & Заметка (Matte tactile surfaces) */}
         <div className="grid grid-cols-2 gap-3">
           <button
             id="quick-save-link-button"
@@ -175,10 +256,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
               triggerHaptic('light');
               onOpenSaveLink();
             }}
-            className="h-[46px] rounded-[16px] px-4 flex items-center justify-center gap-2 cursor-pointer font-normal transition-colors active:opacity-80"
+            className="h-[50px] rounded-[16px] px-4 flex items-center justify-center gap-2 cursor-pointer font-normal transition-opacity active:opacity-80 matte-tile"
             style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.09)',
               color: '#C3C8D0',
               fontSize: '13.5px',
             }}
@@ -206,10 +285,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
               triggerHaptic('light');
               onOpenSaveNote();
             }}
-            className="h-[46px] rounded-[16px] px-4 flex items-center justify-center gap-2 cursor-pointer font-normal transition-colors active:opacity-80"
+            className="h-[50px] rounded-[16px] px-4 flex items-center justify-center gap-2 cursor-pointer font-normal transition-opacity active:opacity-80 matte-tile"
             style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.09)',
               color: '#C3C8D0',
               fontSize: '13.5px',
             }}

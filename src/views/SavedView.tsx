@@ -75,15 +75,11 @@ export const SavedView: React.FC<SavedViewProps> = ({
         </span>
       </div>
 
-      {/* Search Field */}
+      {/* Search Field (Matte tile with soft white reflection) */}
       <div
-        className="w-full rounded-[18px] py-2.5 px-3.5 flex items-center gap-2.5 mb-4 shrink-0 transition-colors"
-        style={{
-          backgroundColor: 'rgba(255, 255, 255, 0.05)',
-          border: searchQuery.trim()
-            ? '1px solid rgba(140, 157, 214, 0.35)'
-            : '1px solid rgba(255, 255, 255, 0.09)',
-        }}
+        className={`w-full rounded-[18px] py-2.5 px-3.5 flex items-center gap-2.5 mb-4 shrink-0 transition-all matte-tile ${
+          searchQuery.trim() ? 'border-[rgba(140,157,214,0.35)]' : ''
+        }`}
       >
         <svg
           width="18"
@@ -156,11 +152,7 @@ export const SavedView: React.FC<SavedViewProps> = ({
                 triggerHaptic('light');
                 onSelectItem(item);
               }}
-              className="rounded-2xl p-3.5 flex items-center gap-3 cursor-pointer transition-colors active:opacity-85"
-              style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-              }}
+              className="rounded-2xl p-3.5 flex items-center gap-3 cursor-pointer transition-all active:opacity-85 matte-tile"
             >
               {/* Small Type Icon (34px) */}
               <div

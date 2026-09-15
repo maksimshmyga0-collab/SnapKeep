@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CategoryName, MainTab, SavedItem } from './types';
-import { CATEGORIES } from './data/initialData';
 import { initTelegramApp } from './services/telegram';
 import { BottomNav } from './components/BottomNav';
 import { HomeView } from './views/HomeView';
@@ -9,6 +8,7 @@ import { CategoriesView } from './views/CategoriesView';
 import { SaveLinkSheet } from './components/SaveLinkSheet';
 import { SaveNoteSheet } from './components/SaveNoteSheet';
 import { ItemDetailSheet } from './components/ItemDetailSheet';
+import { Toast } from './components/Toast';
 
 const STORAGE_KEY_ITEMS = 'snapkeep_user_saved_items_v3';
 
@@ -92,6 +92,20 @@ export default function App() {
   const [isSaveNoteOpen, setIsSaveNoteOpen] = useState<boolean>(false);
   const [activeDetailItem, setActiveDetailItem] = useState<SavedItem | null>(null);
 
+  // Toast notifications
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = (message: string) => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    setToastMessage(message);
+    toastTimerRef.current = setTimeout(() => {
+      setToastMessage(null);
+    }, 2500);
+  };
+
   // Sync saved items to local storage
   useEffect(() => {
     try {
@@ -112,9 +126,63 @@ export default function App() {
     setSavedItems((prev) => [newItem, ...prev]);
   };
 
+  // Quick Save from Clipboard
+  const handleSaveClipboardLink = (url: string) => {
+    let formattedUrl = url.trim();
+    if (!/^https?:\/\//i.test(formattedUrl)) {
+      formattedUrl = `https://${formattedUrl}`;
+    }
+
+    let source = 'ссылка';
+    try {
+      const parsed = new URL(formattedUrl);
+      source = parsed.hostname.replace(/^www\./, '');
+    } catch {
+      source = 'ссылка';
+    }
+
+    const isVideo =
+      formattedUrl.includes('youtube') ||
+      formattedUrl.includes('youtu.be') ||
+      formattedUrl.includes('vimeo') ||
+      formattedUrl.includes('tiktok');
+
+    let title = source;
+    try {
+      const parsed = new URL(formattedUrl);
+      const segments = parsed.pathname.split('/').filter(Boolean);
+      if (segments.length > 0) {
+        const last = decodeURIComponent(segments[segments.length - 1]).replace(/[-_]/g, ' ');
+        if (last.length > 3) {
+          title = last.slice(0, 60);
+        }
+      }
+    } catch {}
+
+    if (!title || title === source) {
+      title = isVideo ? `Видео (${source})` : `Ссылка (${source})`;
+    }
+
+    handleSaveItem({
+      title,
+      url: formattedUrl,
+      sourceKind: isVideo ? 'video' : 'article',
+      sourceLabel: source,
+      category: 'Разное',
+    });
+  };
+
   // Handler for Deleting an item
   const handleDeleteItem = (id: string) => {
     setSavedItems((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  // Handler for updating an item's category
+  const handleUpdateCategory = (id: string, newCategory: CategoryName) => {
+    setSavedItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, category: newCategory } : item))
+    );
+    setActiveDetailItem((prev) => (prev && prev.id === id ? { ...prev, category: newCategory } : prev));
   };
 
   // Home Screen: Tapping Search opens Saved screen with search active
@@ -132,11 +200,14 @@ export default function App() {
   return (
     <div
       id="snapkeep-app-root"
-      className="w-full min-h-[100dvh] h-[100dvh] bg-[#0B0C0E] text-[#F2F3F5] flex flex-col overflow-hidden select-none"
+      className="w-full min-h-[100dvh] h-[100dvh] bg-[#0C0D10] matte-graphite-bg text-[#F2F3F5] flex flex-col overflow-hidden select-none"
       style={{
         fontFamily: 'var(--font-sans)',
       }}
     >
+      {/* Toast Notification */}
+      <Toast message={toastMessage} />
+
       {/* Full-screen Container */}
       <div className="w-full max-w-md mx-auto flex-1 flex flex-col overflow-hidden relative">
         {/* VIEW 1: HOME */}
@@ -145,10 +216,13 @@ export default function App() {
             totalSaved={totalSaved}
             todayCount={todayCount}
             categoryCounts={categoryCounts}
+            savedItems={savedItems}
             onOpenSearch={handleOpenSearchFromHome}
             onSelectCategory={handleSelectCategoryFromHome}
             onOpenSaveLink={() => setIsSaveLinkOpen(true)}
             onOpenSaveNote={() => setIsSaveNoteOpen(true)}
+            onSaveClipboardLink={handleSaveClipboardLink}
+            onShowToast={showToast}
           />
         )}
 
@@ -206,6 +280,7 @@ export default function App() {
         item={activeDetailItem}
         onClose={() => setActiveDetailItem(null)}
         onDelete={handleDeleteItem}
+        onUpdateCategory={handleUpdateCategory}
       />
     </div>
   );

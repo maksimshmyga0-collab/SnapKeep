@@ -84,7 +84,7 @@ export const SaveLinkSheet: React.FC<SaveLinkSheetProps> = ({
       id="save-link-sheet-backdrop"
       className="fixed inset-0 z-50 flex items-end justify-center"
       style={{
-        backgroundColor: 'rgba(0, 0, 0, 0.65)',
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
         backdropFilter: 'blur(3px)',
       }}
       onClick={(e) => {
@@ -96,7 +96,7 @@ export const SaveLinkSheet: React.FC<SaveLinkSheetProps> = ({
     >
       <div
         id="save-link-sheet-panel"
-        className="w-full max-w-md bg-[#0B0C0E] flex flex-col animate-in fade-in slide-in-from-bottom duration-200"
+        className="w-full max-w-md flex flex-col animate-in fade-in slide-in-from-bottom duration-200 matte-sheet-panel"
         style={{
           borderTopLeftRadius: '24px',
           borderTopRightRadius: '24px',
@@ -137,10 +137,8 @@ export const SaveLinkSheet: React.FC<SaveLinkSheetProps> = ({
               onClose();
             }}
             aria-label="Закрыть"
-            className="w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-colors"
+            className="w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-colors matte-tile"
             style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.06)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
               color: '#8E939C',
             }}
           >
@@ -151,69 +149,54 @@ export const SaveLinkSheet: React.FC<SaveLinkSheetProps> = ({
           </button>
         </div>
 
-        {/* Link Input Card */}
-        <div
-          className="rounded-2xl p-3.5 mb-5 flex items-start gap-3"
-          style={{
-            backgroundColor: 'rgba(255, 255, 255, 0.04)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-          }}
-        >
-          {/* Source Icon Chip */}
-          <div
-            className="w-[34px] h-[34px] rounded-xl shrink-0 flex items-center justify-center"
-            style={{
-              backgroundColor: 'rgba(90, 109, 166, 0.22)',
-              border: '1px solid rgba(140, 157, 214, 0.28)',
-              color: '#C8D2F0',
-            }}
-          >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-            </svg>
-          </div>
-
-          <div className="flex-1 min-w-0 pr-1 flex flex-col gap-1.5">
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Название (необязательно)"
-              className="w-full bg-transparent text-[#F2F3F5] font-medium text-[14px] leading-tight placeholder:text-[#5C6068] focus:outline-none"
-            />
-            <input
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://..."
-              autoFocus
-              className="w-full bg-transparent text-[#C3C8D0] text-[13px] leading-tight placeholder:text-[#5C6068] focus:outline-none"
-            />
-          </div>
+        {/* Input: URL */}
+        <div className="mb-3.5">
+          <label className="block text-[12px] font-normal text-[#8E939C] mb-1.5">
+            Ссылка или адрес
+          </label>
+          <input
+            id="link-url-input"
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://..."
+            autoFocus
+            className="w-full rounded-2xl py-3 px-3.5 text-[#F2F3F5] text-[14px] focus:outline-none transition-all placeholder:text-[#5C6068] matte-tile"
+          />
         </div>
 
-        {/* Category Section */}
-        <div className="mb-6">
-          <div
-            className="text-[#8E939C] mb-2.5 font-normal"
-            style={{ fontSize: '12px', letterSpacing: '-0.01em' }}
-          >
-            Категория
-          </div>
+        {/* Input: Title (Optional) */}
+        <div className="mb-4">
+          <label className="block text-[12px] font-normal text-[#8E939C] mb-1.5">
+            Название (необязательно)
+          </label>
+          <input
+            id="link-title-input"
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Краткое описание"
+            className="w-full rounded-2xl py-3 px-3.5 text-[#F2F3F5] text-[14px] focus:outline-none transition-all placeholder:text-[#5C6068] matte-tile"
+          />
+        </div>
 
-          <div className="flex flex-wrap gap-2">
+        {/* Category Selector */}
+        <div className="mb-6">
+          <label className="block text-[12px] font-normal text-[#8E939C] mb-2">
+            Категория
+          </label>
+          <div className="flex flex-wrap gap-1.5">
             {CATEGORIES.map((cat) => {
-              const isSelected = selectedCategory === cat;
+              const isSelected = cat === selectedCategory;
               return (
                 <button
                   key={cat}
                   type="button"
                   onClick={() => handleSelectCategory(cat)}
-                  className="rounded-xl px-3.5 py-1.5 cursor-pointer text-[13px] font-normal transition-all"
+                  className={`rounded-xl px-3.5 py-1.5 text-[12.5px] cursor-pointer transition-all ${
+                    isSelected ? 'matte-tile-primary font-medium' : 'matte-chip font-normal'
+                  }`}
                   style={{
-                    backgroundColor: isSelected ? 'rgba(90, 109, 166, 0.24)' : 'rgba(255, 255, 255, 0.04)',
-                    border: isSelected ? '1px solid rgba(140, 157, 214, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)',
                     color: isSelected ? '#E4E8F2' : '#8E939C',
                   }}
                 >
@@ -230,17 +213,15 @@ export const SaveLinkSheet: React.FC<SaveLinkSheetProps> = ({
           type="button"
           onClick={handleConfirm}
           disabled={!isFormValid}
-          className="w-full rounded-2xl py-3.5 flex items-center justify-center gap-2 cursor-pointer font-medium text-[15px] transition-all active:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed"
+          className={`w-full h-[52px] rounded-[18px] flex items-center justify-center font-medium transition-all ${
+            isFormValid ? 'cursor-pointer active:opacity-85 matte-tile-primary' : 'cursor-not-allowed opacity-40 matte-tile'
+          }`}
           style={{
-            backgroundColor: 'rgba(90, 109, 166, 0.25)',
-            border: '1px solid rgba(140, 157, 214, 0.35)',
-            color: '#E4E8F2',
+            fontSize: '15px',
+            color: isFormValid ? '#F2F3F5' : '#7C818A',
           }}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-          <span>Готово</span>
+          Сохранить
         </button>
       </div>
     </div>

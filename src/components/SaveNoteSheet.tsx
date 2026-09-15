@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CategoryName, SavedItem } from '../types';
+import { CATEGORIES } from '../data/initialData';
 import { triggerHaptic } from '../services/telegram';
 
 interface SaveNoteSheetProps {
@@ -9,15 +10,6 @@ interface SaveNoteSheetProps {
   initialCategory?: CategoryName;
 }
 
-const CATEGORIES: CategoryName[] = [
-  'Учёба',
-  'Идеи',
-  'Дизайн',
-  'Деньги',
-  'Творчество',
-  'Разное',
-];
-
 export const SaveNoteSheet: React.FC<SaveNoteSheetProps> = ({
   isOpen,
   onClose,
@@ -26,6 +18,14 @@ export const SaveNoteSheet: React.FC<SaveNoteSheetProps> = ({
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<CategoryName>(initialCategory);
   const [noteContent, setNoteContent] = useState('');
+
+  // Reset fields on modal open
+  useEffect(() => {
+    if (isOpen) {
+      setNoteContent('');
+      setSelectedCategory(initialCategory);
+    }
+  }, [isOpen, initialCategory]);
 
   if (!isOpen) return null;
 
@@ -42,17 +42,17 @@ export const SaveNoteSheet: React.FC<SaveNoteSheetProps> = ({
     }
 
     triggerHaptic('success');
-    // Extract first line or up to 60 characters as title
-    const firstLine = trimmed.split('\n')[0].substring(0, 65);
+    // First line becomes the title, full text saved in textContent
+    const lines = trimmed.split('\n').filter((l) => l.trim().length > 0);
+    const title = lines[0] ? lines[0].slice(0, 60) : 'Заметка';
 
     onSave({
-      title: firstLine,
+      title,
+      textContent: trimmed,
       sourceKind: 'note',
       sourceLabel: 'заметка',
       category: selectedCategory,
-      textContent: trimmed,
     });
-    setNoteContent('');
     onClose();
   };
 
@@ -61,7 +61,7 @@ export const SaveNoteSheet: React.FC<SaveNoteSheetProps> = ({
       id="save-note-sheet-backdrop"
       className="fixed inset-0 z-50 flex items-end justify-center"
       style={{
-        backgroundColor: 'rgba(0, 0, 0, 0.65)',
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
         backdropFilter: 'blur(3px)',
       }}
       onClick={(e) => {
@@ -73,7 +73,7 @@ export const SaveNoteSheet: React.FC<SaveNoteSheetProps> = ({
     >
       <div
         id="save-note-sheet-panel"
-        className="w-full max-w-md bg-[#0B0C0E] flex flex-col animate-in fade-in slide-in-from-bottom duration-200"
+        className="w-full max-w-md flex flex-col animate-in fade-in slide-in-from-bottom duration-200 matte-sheet-panel"
         style={{
           borderTopLeftRadius: '24px',
           borderTopRightRadius: '24px',
@@ -114,10 +114,8 @@ export const SaveNoteSheet: React.FC<SaveNoteSheetProps> = ({
               onClose();
             }}
             aria-label="Закрыть"
-            className="w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-colors"
+            className="w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-colors matte-tile"
             style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.06)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
               color: '#8E939C',
             }}
           >
@@ -128,7 +126,7 @@ export const SaveNoteSheet: React.FC<SaveNoteSheetProps> = ({
           </button>
         </div>
 
-        {/* Note Text Area */}
+        {/* Note Text Area (Matte tile styling) */}
         <div className="mb-4">
           <textarea
             id="note-input-textarea"
@@ -137,10 +135,8 @@ export const SaveNoteSheet: React.FC<SaveNoteSheetProps> = ({
             onChange={(e) => setNoteContent(e.target.value)}
             placeholder="Запишите мысль или тезис..."
             autoFocus
-            className="w-full rounded-2xl p-3.5 text-[#F2F3F5] text-[14px] leading-relaxed resize-none focus:outline-none transition-all placeholder:text-[#5C6068]"
+            className="w-full rounded-2xl p-3.5 text-[#F2F3F5] text-[14px] leading-relaxed resize-none focus:outline-none transition-all placeholder:text-[#5C6068] matte-tile"
             style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.04)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
               minHeight: '120px',
             }}
           />
@@ -163,10 +159,10 @@ export const SaveNoteSheet: React.FC<SaveNoteSheetProps> = ({
                   key={cat}
                   type="button"
                   onClick={() => handleSelectCategory(cat)}
-                  className="rounded-xl px-3.5 py-1.5 cursor-pointer text-[13px] font-normal transition-all"
+                  className={`rounded-xl px-3.5 py-1.5 cursor-pointer text-[13px] transition-all ${
+                    isSelected ? 'matte-tile-primary font-medium' : 'matte-chip font-normal'
+                  }`}
                   style={{
-                    backgroundColor: isSelected ? 'rgba(90, 109, 166, 0.24)' : 'rgba(255, 255, 255, 0.04)',
-                    border: isSelected ? '1px solid rgba(140, 157, 214, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)',
                     color: isSelected ? '#E4E8F2' : '#8E939C',
                   }}
                 >
@@ -183,10 +179,8 @@ export const SaveNoteSheet: React.FC<SaveNoteSheetProps> = ({
           type="button"
           onClick={handleConfirm}
           disabled={!noteContent.trim()}
-          className="w-full rounded-2xl py-3.5 flex items-center justify-center gap-2 cursor-pointer font-medium text-[15px] transition-opacity active:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-full rounded-2xl py-3.5 flex items-center justify-center gap-2 cursor-pointer font-medium text-[15px] transition-opacity active:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed matte-tile-primary"
           style={{
-            backgroundColor: 'rgba(90, 109, 166, 0.25)',
-            border: '1px solid rgba(140, 157, 214, 0.35)',
             color: '#E4E8F2',
           }}
         >

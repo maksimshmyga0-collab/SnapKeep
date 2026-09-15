@@ -1,30 +1,47 @@
 import React from 'react';
-import { SavedItem } from '../types';
+import { CategoryName, SavedItem } from '../types';
+import { CATEGORIES } from '../data/initialData';
 import { triggerHaptic } from '../services/telegram';
 
 interface ItemDetailSheetProps {
   item: SavedItem | null;
   onClose: () => void;
   onDelete: (id: string) => void;
+  onUpdateCategory?: (id: string, newCategory: CategoryName) => void;
 }
 
 export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
   item,
   onClose,
   onDelete,
+  onUpdateCategory,
 }) => {
   if (!item) return null;
-
-  const handleCopy = () => {
-    triggerHaptic('success');
-    const textToCopy = item.url || item.textContent || item.title;
-    navigator.clipboard?.writeText(textToCopy);
-  };
 
   const handleOpenLink = () => {
     if (item.url) {
       triggerHaptic('light');
       window.open(item.url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  const handleCopy = async () => {
+    const textToCopy = item.url || item.textContent || item.title;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(textToCopy);
+        triggerHaptic('success');
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = textToCopy;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        triggerHaptic('success');
+      }
+    } catch {
+      triggerHaptic('medium');
     }
   };
 
@@ -34,12 +51,19 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
     onClose();
   };
 
+  const handleCategoryChange = (newCat: CategoryName) => {
+    if (onUpdateCategory && newCat !== item.category) {
+      triggerHaptic('selection');
+      onUpdateCategory(item.id, newCat);
+    }
+  };
+
   return (
     <div
       id="item-detail-sheet-backdrop"
       className="fixed inset-0 z-50 flex items-end justify-center"
       style={{
-        backgroundColor: 'rgba(0, 0, 0, 0.65)',
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
         backdropFilter: 'blur(3px)',
       }}
       onClick={(e) => {
@@ -51,7 +75,7 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
     >
       <div
         id="item-detail-sheet-panel"
-        className="w-full max-w-md bg-[#0B0C0E] flex flex-col animate-in fade-in slide-in-from-bottom duration-200"
+        className="w-full max-w-md flex flex-col animate-in fade-in slide-in-from-bottom duration-200 matte-sheet-panel"
         style={{
           borderTopLeftRadius: '24px',
           borderTopRightRadius: '24px',
@@ -77,22 +101,10 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
         </div>
 
         {/* Header Row */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <span
-              className="text-[12px] px-2.5 py-1 rounded-lg font-normal"
-              style={{
-                backgroundColor: 'rgba(90, 109, 166, 0.22)',
-                border: '1px solid rgba(140, 157, 214, 0.28)',
-                color: '#E4E8F2',
-              }}
-            >
-              {item.category}
-            </span>
-            <span className="text-[12px] text-[#6C717A]">
-              · {item.sourceLabel}
-            </span>
-          </div>
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-[12px] text-[#6C717A] font-normal">
+            Источник: {item.sourceLabel}
+          </span>
           <button
             id="close-item-detail-sheet"
             type="button"
@@ -101,10 +113,8 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
               onClose();
             }}
             aria-label="Закрыть"
-            className="w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-colors"
+            className="w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-colors matte-tile"
             style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.06)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
               color: '#8E939C',
             }}
           >
@@ -123,11 +133,7 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
         {/* URL or Text Content */}
         {item.url && (
           <div
-            className="p-3 rounded-xl mb-4 break-all text-[13px] text-[#8E939C] flex items-center justify-between gap-2"
-            style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.04)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-            }}
+            className="p-3 rounded-xl mb-3 break-all text-[13px] text-[#8E939C] flex items-center justify-between gap-2 matte-tile"
           >
             <span className="truncate">{item.url}</span>
           </div>
@@ -135,15 +141,38 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
 
         {item.textContent && (
           <div
-            className="p-3.5 rounded-xl mb-4 text-[14px] text-[#C3C8D0] leading-relaxed whitespace-pre-wrap"
-            style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.04)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-            }}
+            className="p-3.5 rounded-xl mb-3 text-[14px] text-[#C3C8D0] leading-relaxed whitespace-pre-wrap matte-tile"
           >
             {item.textContent}
           </div>
         )}
+
+        {/* Category Selection */}
+        <div className="mb-4">
+          <div className="text-[12px] text-[#8E939C] mb-2 font-normal">
+            Категория
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {CATEGORIES.map((cat) => {
+              const isSelected = item.category === cat;
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => handleCategoryChange(cat)}
+                  className={`rounded-lg px-2.5 py-1 text-[12px] transition-all cursor-pointer ${
+                    isSelected ? 'matte-tile-primary font-medium' : 'matte-chip font-normal'
+                  }`}
+                  style={{
+                    color: isSelected ? '#E4E8F2' : '#8E939C',
+                  }}
+                >
+                  {cat}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         {/* Action Buttons */}
         <div className="flex gap-2.5 pt-1">
@@ -151,10 +180,8 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
             <button
               type="button"
               onClick={handleOpenLink}
-              className="flex-1 py-3 rounded-xl font-medium text-[14px] flex items-center justify-center gap-1.5 cursor-pointer transition-opacity active:opacity-80"
+              className="flex-1 py-3 rounded-xl font-medium text-[14px] flex items-center justify-center gap-1.5 cursor-pointer transition-opacity active:opacity-80 matte-tile-primary"
               style={{
-                backgroundColor: 'rgba(90, 109, 166, 0.25)',
-                border: '1px solid rgba(140, 157, 214, 0.35)',
                 color: '#E4E8F2',
               }}
             >
@@ -170,10 +197,8 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
           <button
             type="button"
             onClick={handleCopy}
-            className="flex-1 py-3 rounded-xl font-normal text-[14px] flex items-center justify-center gap-1.5 cursor-pointer transition-opacity active:opacity-80"
+            className="flex-1 py-3 rounded-xl font-normal text-[14px] flex items-center justify-center gap-1.5 cursor-pointer transition-opacity active:opacity-80 matte-tile"
             style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.09)',
               color: '#C3C8D0',
             }}
           >
@@ -188,10 +213,8 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
             type="button"
             onClick={handleDelete}
             aria-label="Удалить"
-            className="w-12 py-3 rounded-xl flex items-center justify-center cursor-pointer transition-colors shrink-0"
+            className="w-12 py-3 rounded-xl flex items-center justify-center cursor-pointer transition-colors shrink-0 matte-tile"
             style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.04)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
               color: '#8E939C',
             }}
           >

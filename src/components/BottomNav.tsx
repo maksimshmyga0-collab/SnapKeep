@@ -11,7 +11,6 @@ interface BottomNavProps {
 export const BottomNav: React.FC<BottomNavProps> = ({
   activeTab,
   onTabChange,
-  savedCount,
 }) => {
   const handleSelect = (tab: MainTab) => {
     if (tab !== activeTab) {
@@ -26,8 +25,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       aria-label="Основная навигация"
       className="w-full shrink-0 select-none z-30"
       style={{
-        backgroundColor: '#0B0C0E',
-        borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+        backgroundColor: '#0C0D10',
+        borderTop: '1px solid rgba(255, 255, 255, 0.075)',
         paddingTop: '10px',
         paddingBottom: 'calc(14px + env(safe-area-inset-bottom, 0px))',
         paddingLeft: '16px',
@@ -40,10 +39,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           id="nav-tab-home"
           type="button"
           onClick={() => handleSelect('HOME')}
-          className="flex flex-col items-center justify-center py-1 px-4 rounded-xl cursor-pointer transition-colors"
+          className={`flex flex-col items-center justify-center py-1 px-4 rounded-xl cursor-pointer transition-all ${
+            activeTab === 'HOME' ? 'matte-chip' : ''
+          }`}
           style={{
             color: activeTab === 'HOME' ? '#F2F3F5' : '#7C818A',
-            backgroundColor: activeTab === 'HOME' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+            backgroundColor: activeTab === 'HOME' ? undefined : 'transparent',
           }}
         >
           <svg
@@ -77,10 +78,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           id="nav-tab-saved"
           type="button"
           onClick={() => handleSelect('SAVED')}
-          className="flex flex-col items-center justify-center py-1 px-4 rounded-xl cursor-pointer transition-colors relative"
+          className={`flex flex-col items-center justify-center py-1 px-4 rounded-xl cursor-pointer transition-all relative ${
+            activeTab === 'SAVED' ? 'matte-chip' : ''
+          }`}
           style={{
             color: activeTab === 'SAVED' ? '#F2F3F5' : '#7C818A',
-            backgroundColor: activeTab === 'SAVED' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+            backgroundColor: activeTab === 'SAVED' ? undefined : 'transparent',
           }}
         >
           <svg
@@ -113,10 +116,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           id="nav-tab-categories"
           type="button"
           onClick={() => handleSelect('CATEGORIES')}
-          className="flex flex-col items-center justify-center py-1 px-4 rounded-xl cursor-pointer transition-colors"
+          className={`flex flex-col items-center justify-center py-1 px-4 rounded-xl cursor-pointer transition-all ${
+            activeTab === 'CATEGORIES' ? 'matte-chip' : ''
+          }`}
           style={{
             color: activeTab === 'CATEGORIES' ? '#F2F3F5' : '#7C818A',
-            backgroundColor: activeTab === 'CATEGORIES' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+            backgroundColor: activeTab === 'CATEGORIES' ? undefined : 'transparent',
           }}
         >
           <svg

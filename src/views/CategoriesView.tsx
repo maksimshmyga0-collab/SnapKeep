@@ -38,11 +38,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
                 onSelectCategory(null);
               }}
               aria-label="Назад ко всем категориям"
-              className="w-8 h-8 rounded-full flex items-center justify-center cursor-pointer text-[#8E939C] hover:text-[#F2F3F5] mr-1"
-              style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-              }}
+              className="w-8 h-8 rounded-full flex items-center justify-center cursor-pointer text-[#8E939C] hover:text-[#F2F3F5] mr-1 matte-tile"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="15 18 9 12 15 6" />
@@ -77,11 +73,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
                   triggerHaptic('selection');
                   onSelectCategory(cat);
                 }}
-                className="w-full rounded-2xl p-4 flex items-center justify-between cursor-pointer transition-colors text-left active:opacity-85"
-                style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.04)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                }}
+                className="w-full rounded-2xl p-4 flex items-center justify-between cursor-pointer transition-all text-left active:opacity-85 matte-tile"
               >
                 <div className="flex items-center gap-3">
                   <div
@@ -139,10 +131,10 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
                     triggerHaptic('selection');
                     onSelectCategory(cat);
                   }}
-                  className="rounded-xl px-3 py-1 text-[12px] font-normal shrink-0 transition-colors"
+                  className={`rounded-xl px-3 py-1 text-[12px] font-normal shrink-0 transition-colors ${
+                    isActive ? 'matte-tile-primary' : 'matte-chip'
+                  }`}
                   style={{
-                    backgroundColor: isActive ? 'rgba(90, 109, 166, 0.24)' : 'rgba(255, 255, 255, 0.04)',
-                    border: isActive ? '1px solid rgba(140, 157, 214, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)',
                     color: isActive ? '#E4E8F2' : '#8E939C',
                   }}
                 >
@@ -169,11 +161,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
                   triggerHaptic('light');
                   onSelectItem(item);
                 }}
-                className="rounded-2xl p-3.5 flex items-center gap-3 cursor-pointer transition-colors active:opacity-85"
-                style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.04)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                }}
+                className="rounded-2xl p-3.5 flex items-center gap-3 cursor-pointer transition-all active:opacity-85 matte-tile"
               >
                 {/* 34px Icon */}
                 <div

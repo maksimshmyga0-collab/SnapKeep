@@ -1,36 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CategoryName, SavedItem } from '../types';
+import { CATEGORIES } from '../data/initialData';
 import { triggerHaptic } from '../services/telegram';
 
 interface SaveLinkSheetProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (item: Omit<SavedItem, 'id' | 'createdAt'>) => void;
-  initialUrl?: string;
-  initialTitle?: string;
   initialCategory?: CategoryName;
 }
-
-const CATEGORIES: CategoryName[] = [
-  'Учёба',
-  'Идеи',
-  'Дизайн',
-  'Деньги',
-  'Творчество',
-  'Разное',
-];
 
 export const SaveLinkSheet: React.FC<SaveLinkSheetProps> = ({
   isOpen,
   onClose,
   onSave,
-  initialUrl = 'https://youtube.com/watch?v=7h1zR_8V91m',
-  initialTitle = 'Архитектура распределённых систем и микросервисов',
   initialCategory = 'Учёба',
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<CategoryName>(initialCategory);
-  const [title, setTitle] = useState(initialTitle);
-  const [url, setUrl] = useState(initialUrl);
+  const [title, setTitle] = useState('');
+  const [url, setUrl] = useState('');
+
+  // Reset fields whenever the modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setTitle('');
+      setUrl('');
+      setSelectedCategory(initialCategory);
+    }
+  }, [isOpen, initialCategory]);
 
   if (!isOpen) return null;
 
@@ -40,26 +37,47 @@ export const SaveLinkSheet: React.FC<SaveLinkSheetProps> = ({
   };
 
   const handleConfirm = () => {
-    triggerHaptic('success');
-    let source = 'ссылка';
-    try {
-      const parsed = new URL(url);
-      source = parsed.hostname.replace(/^www\./, '');
-    } catch {
-      source = 'ссылка';
+    const trimmedUrl = url.trim();
+    const trimmedTitle = title.trim();
+
+    if (!trimmedUrl && !trimmedTitle) {
+      triggerHaptic('medium');
+      return;
     }
 
-    const isVideo = url.includes('youtube') || url.includes('youtu.be') || url.includes('vimeo');
+    triggerHaptic('success');
+    let source = 'ссылка';
+    let formattedUrl = trimmedUrl;
+
+    if (trimmedUrl) {
+      if (!/^https?:\/\//i.test(trimmedUrl)) {
+        formattedUrl = `https://${trimmedUrl}`;
+      }
+      try {
+        const parsed = new URL(formattedUrl);
+        source = parsed.hostname.replace(/^www\./, '');
+      } catch {
+        source = 'ссылка';
+      }
+    }
+
+    const isVideo =
+      formattedUrl.includes('youtube') ||
+      formattedUrl.includes('youtu.be') ||
+      formattedUrl.includes('vimeo') ||
+      formattedUrl.includes('tiktok');
 
     onSave({
-      title: title.trim() || 'Сохранённая ссылка',
-      url: url.trim(),
+      title: trimmedTitle || source || 'Сохранённая ссылка',
+      url: formattedUrl || undefined,
       sourceKind: isVideo ? 'video' : 'article',
       sourceLabel: source,
       category: selectedCategory,
     });
     onClose();
   };
+
+  const isFormValid = url.trim().length > 0 || title.trim().length > 0;
 
   return (
     <div
@@ -133,7 +151,7 @@ export const SaveLinkSheet: React.FC<SaveLinkSheetProps> = ({
           </button>
         </div>
 
-        {/* Detected Link Preview Card */}
+        {/* Link Input Card */}
         <div
           className="rounded-2xl p-3.5 mb-5 flex items-start gap-3"
           style={{
@@ -156,20 +174,21 @@ export const SaveLinkSheet: React.FC<SaveLinkSheetProps> = ({
             </svg>
           </div>
 
-          <div className="flex-1 min-w-0 pr-1">
+          <div className="flex-1 min-w-0 pr-1 flex flex-col gap-1.5">
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Название ссылки"
-              className="w-full bg-transparent text-[#F2F3F5] font-medium text-[14px] leading-tight mb-1 truncate focus:outline-none"
+              placeholder="Название (необязательно)"
+              className="w-full bg-transparent text-[#F2F3F5] font-medium text-[14px] leading-tight placeholder:text-[#5C6068] focus:outline-none"
             />
             <input
-              type="text"
+              type="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://..."
-              className="w-full bg-transparent text-[#6C717A] text-[12px] leading-tight truncate focus:outline-none"
+              autoFocus
+              className="w-full bg-transparent text-[#C3C8D0] text-[13px] leading-tight placeholder:text-[#5C6068] focus:outline-none"
             />
           </div>
         </div>
@@ -210,7 +229,8 @@ export const SaveLinkSheet: React.FC<SaveLinkSheetProps> = ({
           id="confirm-save-link-button"
           type="button"
           onClick={handleConfirm}
-          className="w-full rounded-2xl py-3.5 flex items-center justify-center gap-2 cursor-pointer font-medium text-[15px] transition-opacity active:opacity-80"
+          disabled={!isFormValid}
+          className="w-full rounded-2xl py-3.5 flex items-center justify-center gap-2 cursor-pointer font-medium text-[15px] transition-all active:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed"
           style={{
             backgroundColor: 'rgba(90, 109, 166, 0.25)',
             border: '1px solid rgba(140, 157, 214, 0.35)',

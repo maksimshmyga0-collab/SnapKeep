@@ -128,9 +128,18 @@ export const SavedView: React.FC<SavedViewProps> = ({
         )}
       </div>
 
-      {/* List of Saved Items */}
+      {/* List of Saved Items or Empty State */}
       <div className="flex-1 overflow-y-auto pr-0.5 space-y-2.5 pb-3 scrollbar-none">
-        {filteredItems.length === 0 ? (
+        {items.length === 0 ? (
+          <div className="h-64 flex flex-col items-center justify-center text-center px-4">
+            <span className="text-[#8E939C] text-[15px] font-normal mb-1">
+              Пока ничего не сохранено
+            </span>
+            <span className="text-[#5C6068] text-[13px]">
+              Сохрани первую ссылку или заметку
+            </span>
+          </div>
+        ) : filteredItems.length === 0 ? (
           <div className="h-48 flex flex-col items-center justify-center text-center px-4">
             <span className="text-[#6C717A] text-[14px] font-normal mb-1">
               Ничего не найдено

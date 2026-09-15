@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { CategoryName, SavedItem } from '../types';
+import { CATEGORIES } from '../data/initialData';
 import { triggerHaptic } from '../services/telegram';
 
 interface CategoriesViewProps {
@@ -9,15 +10,6 @@ interface CategoriesViewProps {
   onSelectCategory: (cat: CategoryName | null) => void;
   onSelectItem: (item: SavedItem) => void;
 }
-
-const CATEGORIES: CategoryName[] = [
-  'Учёба',
-  'Идеи',
-  'Дизайн',
-  'Деньги',
-  'Творчество',
-  'Разное',
-];
 
 export const CategoriesView: React.FC<CategoriesViewProps> = ({
   categoryCounts,
@@ -162,11 +154,11 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
 
           {filteredItems.length === 0 ? (
             <div className="h-44 flex flex-col items-center justify-center text-center px-4">
-              <span className="text-[#6C717A] text-[14px] font-normal mb-1">
-                В этой категории пока пусто
+              <span className="text-[#8E939C] text-[15px] font-normal mb-1">
+                Пока ничего не сохранено
               </span>
-              <span className="text-[#5C6068] text-[12px]">
-                Сохраните ссылку или заметку в категорию «{selectedCategory}»
+              <span className="text-[#5C6068] text-[13px]">
+                Сохрани первую ссылку или заметку в категорию «{selectedCategory}»
               </span>
             </div>
           ) : (

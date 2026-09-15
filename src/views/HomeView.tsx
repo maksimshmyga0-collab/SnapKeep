@@ -1,5 +1,6 @@
 import React from 'react';
 import { CategoryName } from '../types';
+import { CATEGORIES } from '../data/initialData';
 import { triggerHaptic } from '../services/telegram';
 
 interface HomeViewProps {
@@ -11,15 +12,6 @@ interface HomeViewProps {
   onOpenSaveLink: () => void;
   onOpenSaveNote: () => void;
 }
-
-const CATEGORIES: CategoryName[] = [
-  'Учёба',
-  'Идеи',
-  'Дизайн',
-  'Деньги',
-  'Творчество',
-  'Разное',
-];
 
 export const HomeView: React.FC<HomeViewProps> = ({
   totalSaved,
@@ -33,37 +25,37 @@ export const HomeView: React.FC<HomeViewProps> = ({
   return (
     <div
       id="screen-home"
-      className="flex-1 w-full flex flex-col justify-between px-5 pt-7 pb-4 select-none overflow-hidden"
+      className="flex-1 w-full flex flex-col justify-between px-5 pt-[48px] pb-6 select-none overflow-hidden"
     >
-      {/* Top Block: Brand & Statistics */}
-      <div>
-        <div className="mb-2">
-          <span
-            className="text-[#6C717A] tracking-normal font-normal"
-            style={{ fontSize: '13px', lineHeight: '16px' }}
-          >
-            SnapKeep
-          </span>
+      {/* 1. Upper Group: Brand, Statistics & Search (lowered by ~20px) */}
+      <div className="flex flex-col gap-5">
+        {/* Brand & Stats */}
+        <div>
+          <div className="mb-1.5">
+            <span
+              className="text-[#6C717A] tracking-normal font-normal"
+              style={{ fontSize: '13px', lineHeight: '16px' }}
+            >
+              SnapKeep
+            </span>
+          </div>
+
+          <div className="flex flex-col">
+            <div
+              className="text-[#F2F3F5] font-medium tracking-tight"
+              style={{ fontSize: '30px', lineHeight: '36px', letterSpacing: '-0.02em' }}
+            >
+              {totalSaved} сохранено
+            </div>
+            <div
+              className="text-[#7C818A] font-normal mt-1"
+              style={{ fontSize: '14px', lineHeight: '18px' }}
+            >
+              {todayCount} за сегодня
+            </div>
+          </div>
         </div>
 
-        <div className="flex flex-col">
-          <div
-            className="text-[#F2F3F5] font-medium tracking-tight"
-            style={{ fontSize: '30px', lineHeight: '36px', letterSpacing: '-0.02em' }}
-          >
-            {totalSaved} сохранено
-          </div>
-          <div
-            className="text-[#7C818A] font-normal mt-1"
-            style={{ fontSize: '14px', lineHeight: '18px' }}
-          >
-            {todayCount} за сегодня
-          </div>
-        </div>
-      </div>
-
-      {/* Middle Block: Search & Categories */}
-      <div className="my-auto py-4 flex flex-col gap-6">
         {/* Full-width Search Trigger Button */}
         <button
           id="home-search-trigger"
@@ -99,49 +91,49 @@ export const HomeView: React.FC<HomeViewProps> = ({
             Найти сохранённое
           </span>
         </button>
+      </div>
 
-        {/* Compact Category Chips */}
-        <div>
-          <div className="flex flex-wrap gap-[7px]">
-            {CATEGORIES.map((cat) => {
-              const count = categoryCounts[cat] || 0;
-              return (
-                <button
-                  key={cat}
-                  id={`home-chip-${cat}`}
-                  type="button"
-                  onClick={() => {
-                    triggerHaptic('selection');
-                    onSelectCategory(cat);
-                  }}
-                  className="rounded-[20px] px-3.5 py-1.5 flex items-center gap-1.5 cursor-pointer transition-all active:scale-[0.98]"
-                  style={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                    border: '1px solid rgba(255, 255, 255, 0.09)',
-                  }}
+      {/* 2. Middle Group: Compact Category Chips */}
+      <div className="my-auto py-3">
+        <div className="flex flex-wrap gap-[7px]">
+          {CATEGORIES.map((cat) => {
+            const count = categoryCounts[cat] || 0;
+            return (
+              <button
+                key={cat}
+                id={`home-chip-${cat}`}
+                type="button"
+                onClick={() => {
+                  triggerHaptic('selection');
+                  onSelectCategory(cat);
+                }}
+                className="rounded-[20px] px-3.5 py-1.5 flex items-center gap-1.5 cursor-pointer transition-all active:scale-[0.98]"
+                style={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.09)',
+                }}
+              >
+                <span
+                  className="text-[#C3C8D0] font-normal"
+                  style={{ fontSize: '13px', lineHeight: '16px' }}
                 >
-                  <span
-                    className="text-[#C3C8D0] font-normal"
-                    style={{ fontSize: '13px', lineHeight: '16px' }}
-                  >
-                    {cat}
-                  </span>
-                  <span
-                    className="text-[#6C717A] font-normal"
-                    style={{ fontSize: '12px', lineHeight: '16px' }}
-                  >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+                  {cat}
+                </span>
+                <span
+                  className="text-[#6C717A] font-normal"
+                  style={{ fontSize: '12px', lineHeight: '16px' }}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Bottom Block: Main Save Action & Secondary Buttons */}
-      <div className="flex flex-col gap-3 pt-2">
-        {/* Main Save Action (Most important action on screen) */}
+      {/* 3. Lower Group: Main Save Action & Secondary Buttons (lifted upward) */}
+      <div className="flex flex-col gap-3 pb-1">
+        {/* Main Save Action (Prominent primary touch target) */}
         <button
           id="main-save-action-button"
           type="button"
@@ -149,7 +141,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             triggerHaptic('medium');
             onOpenSaveLink();
           }}
-          className="w-full rounded-[18px] py-4 flex items-center justify-center gap-2 cursor-pointer font-medium transition-opacity active:opacity-85 shadow-sm"
+          className="w-full h-[54px] rounded-[18px] flex items-center justify-center gap-2 cursor-pointer font-medium transition-opacity active:opacity-85 shadow-sm"
           style={{
             backgroundColor: 'rgba(90, 109, 166, 0.22)',
             border: '1px solid rgba(140, 157, 214, 0.28)',
@@ -174,7 +166,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           <span>Сохранить</span>
         </button>
 
-        {/* Two smaller actions: Ссылка & Заметка */}
+        {/* Secondary actions: Ссылка & Заметка (elevated touch target) */}
         <div className="grid grid-cols-2 gap-3">
           <button
             id="quick-save-link-button"
@@ -183,7 +175,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               triggerHaptic('light');
               onOpenSaveLink();
             }}
-            className="rounded-[16px] py-3 px-4 flex items-center justify-center gap-2 cursor-pointer font-normal transition-colors active:opacity-80"
+            className="h-[46px] rounded-[16px] px-4 flex items-center justify-center gap-2 cursor-pointer font-normal transition-colors active:opacity-80"
             style={{
               backgroundColor: 'rgba(255, 255, 255, 0.05)',
               border: '1px solid rgba(255, 255, 255, 0.09)',
@@ -214,7 +206,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               triggerHaptic('light');
               onOpenSaveNote();
             }}
-            className="rounded-[16px] py-3 px-4 flex items-center justify-center gap-2 cursor-pointer font-normal transition-colors active:opacity-80"
+            className="h-[46px] rounded-[16px] px-4 flex items-center justify-center gap-2 cursor-pointer font-normal transition-colors active:opacity-80"
             style={{
               backgroundColor: 'rgba(255, 255, 255, 0.05)',
               border: '1px solid rgba(255, 255, 255, 0.09)',
@@ -237,16 +229,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </svg>
             <span>Заметка</span>
           </button>
-        </div>
-
-        {/* Centered Hint */}
-        <div className="text-center pt-1 pb-1">
-          <span
-            className="text-[#5C6068] font-normal"
-            style={{ fontSize: '11.5px', lineHeight: '14px' }}
-          >
-            Из буфера обмена: youtube.com/watch…
-          </span>
         </div>
       </div>
     </div>

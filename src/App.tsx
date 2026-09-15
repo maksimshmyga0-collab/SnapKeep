@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { CategoryName, MainTab, SavedItem } from './types';
-import { INITIAL_CATEGORY_COUNTS, INITIAL_SAVED_ITEMS } from './data/initialData';
-import { initTelegramApp, triggerHaptic } from './services/telegram';
+import { CATEGORIES } from './data/initialData';
+import { initTelegramApp } from './services/telegram';
 import { BottomNav } from './components/BottomNav';
 import { HomeView } from './views/HomeView';
 import { SavedView } from './views/SavedView';
@@ -10,58 +10,75 @@ import { SaveLinkSheet } from './components/SaveLinkSheet';
 import { SaveNoteSheet } from './components/SaveNoteSheet';
 import { ItemDetailSheet } from './components/ItemDetailSheet';
 
-const STORAGE_KEY_ITEMS = 'snapkeep_saved_items_v2';
-const STORAGE_KEY_COUNTS = 'snapkeep_category_counts_v2';
-const STORAGE_KEY_TOTAL = 'snapkeep_total_saved_v2';
-const STORAGE_KEY_TODAY = 'snapkeep_today_count_v2';
+const STORAGE_KEY_ITEMS = 'snapkeep_user_saved_items_v3';
+
+// Helper to determine if an ISO date string is from today
+function isCreatedToday(dateStr: string): boolean {
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+    return (
+      d.getDate() === now.getDate() &&
+      d.getMonth() === now.getMonth() &&
+      d.getFullYear() === now.getFullYear()
+    );
+  } catch {
+    return false;
+  }
+}
 
 export default function App() {
-  // Telegram initialization
+  // Telegram initialization & legacy demo key cleanup
   useEffect(() => {
     initTelegramApp();
+    try {
+      localStorage.removeItem('snapkeep_saved_items_v2');
+      localStorage.removeItem('snapkeep_category_counts_v2');
+      localStorage.removeItem('snapkeep_total_saved_v2');
+      localStorage.removeItem('snapkeep_today_count_v2');
+    } catch {}
   }, []);
 
-  // Primary navigation state (Only 3 tabs: HOME, SAVED, CATEGORIES)
+  // Primary navigation state (Strictly 3 tabs: HOME, SAVED, CATEGORIES)
   const [activeTab, setActiveTab] = useState<MainTab>('HOME');
 
-  // Persistence: Saved items
+  // Persistence: Saved items (clean initial state: empty array)
   const [savedItems, setSavedItems] = useState<SavedItem[]>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY_ITEMS);
-      if (stored) return JSON.parse(stored);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed;
+      }
     } catch (e) {
       console.warn('Failed to load stored items', e);
     }
-    return INITIAL_SAVED_ITEMS;
+    return [];
   });
 
-  // Category counts
-  const [categoryCounts, setCategoryCounts] = useState<Record<CategoryName, number>>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY_COUNTS);
-      if (stored) return JSON.parse(stored);
-    } catch (e) {
-      console.warn('Failed to load category counts', e);
+  // Dynamic statistics strictly calculated from real saved items
+  const totalSaved = savedItems.length;
+
+  const todayCount = useMemo(() => {
+    return savedItems.filter((item) => isCreatedToday(item.createdAt)).length;
+  }, [savedItems]);
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<CategoryName, number> = {
+      Учёба: 0,
+      Идеи: 0,
+      Дизайн: 0,
+      Деньги: 0,
+      Творчество: 0,
+      Разное: 0,
+    };
+    for (const item of savedItems) {
+      if (counts[item.category] !== undefined) {
+        counts[item.category]++;
+      }
     }
-    return INITIAL_CATEGORY_COUNTS;
-  });
-
-  // Main statistics
-  const [totalSaved, setTotalSaved] = useState<number>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY_TOTAL);
-      if (stored) return Number(stored);
-    } catch {}
-    return 248;
-  });
-
-  const [todayCount, setTodayCount] = useState<number>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY_TODAY);
-      if (stored) return Number(stored);
-    } catch {}
-    return 6;
-  });
+    return counts;
+  }, [savedItems]);
 
   // Search state for SAVED screen
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -75,17 +92,14 @@ export default function App() {
   const [isSaveNoteOpen, setIsSaveNoteOpen] = useState<boolean>(false);
   const [activeDetailItem, setActiveDetailItem] = useState<SavedItem | null>(null);
 
-  // Sync to local storage
+  // Sync saved items to local storage
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(savedItems));
-      localStorage.setItem(STORAGE_KEY_COUNTS, JSON.stringify(categoryCounts));
-      localStorage.setItem(STORAGE_KEY_TOTAL, String(totalSaved));
-      localStorage.setItem(STORAGE_KEY_TODAY, String(todayCount));
     } catch (e) {
-      console.warn('Failed to persist state', e);
+      console.warn('Failed to persist items', e);
     }
-  }, [savedItems, categoryCounts, totalSaved, todayCount]);
+  }, [savedItems]);
 
   // Handlers for Save actions
   const handleSaveItem = (itemData: Omit<SavedItem, 'id' | 'createdAt'>) => {
@@ -96,27 +110,11 @@ export default function App() {
     };
 
     setSavedItems((prev) => [newItem, ...prev]);
-    setTotalSaved((prev) => prev + 1);
-    setTodayCount((prev) => prev + 1);
-
-    setCategoryCounts((prev) => ({
-      ...prev,
-      [newItem.category]: (prev[newItem.category] || 0) + 1,
-    }));
   };
 
   // Handler for Deleting an item
   const handleDeleteItem = (id: string) => {
-    const itemToDelete = savedItems.find((item) => item.id === id);
-    if (!itemToDelete) return;
-
     setSavedItems((prev) => prev.filter((item) => item.id !== id));
-    setTotalSaved((prev) => Math.max(0, prev - 1));
-
-    setCategoryCounts((prev) => ({
-      ...prev,
-      [itemToDelete.category]: Math.max(0, (prev[itemToDelete.category] || 1) - 1),
-    }));
   };
 
   // Home Screen: Tapping Search opens Saved screen with search active
@@ -139,7 +137,7 @@ export default function App() {
         fontFamily: 'var(--font-sans)',
       }}
     >
-      {/* Full-screen Responsive Container */}
+      {/* Full-screen Container */}
       <div className="w-full max-w-md mx-auto flex-1 flex flex-col overflow-hidden relative">
         {/* VIEW 1: HOME */}
         {activeTab === 'HOME' && (

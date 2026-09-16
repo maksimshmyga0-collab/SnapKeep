@@ -10,6 +10,7 @@ export type SourceKind = 'video' | 'article' | 'note';
 
 export interface SavedItem {
   id: string;
+  telegramUserId?: string;
   title: string;
   url?: string;
   sourceKind: SourceKind;

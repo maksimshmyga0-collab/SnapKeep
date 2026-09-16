@@ -1,6 +1,13 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { CategoryName, MainTab, SavedItem } from './types';
 import { initTelegramApp } from './services/telegram';
+import {
+  getCurrentTelegramUserId,
+  fetchServerItems,
+  saveServerItem,
+  updateServerItem,
+  deleteServerItem,
+} from './services/api';
 import { BottomNav } from './components/BottomNav';
 import { HomeView } from './views/HomeView';
 import { SavedView } from './views/SavedView';
@@ -40,10 +47,13 @@ export default function App() {
     } catch {}
   }, []);
 
+  // Current user ID (Telegram user ID or preview fallback)
+  const [telegramUserId] = useState<string>(() => getCurrentTelegramUserId());
+
   // Primary navigation state (Strictly 3 tabs: HOME, SAVED, CATEGORIES)
   const [activeTab, setActiveTab] = useState<MainTab>('HOME');
 
-  // Persistence: Saved items (clean initial state: empty array)
+  // Persistence: Saved items
   const [savedItems, setSavedItems] = useState<SavedItem[]>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY_ITEMS);
@@ -56,6 +66,65 @@ export default function App() {
     }
     return [];
   });
+
+  // Toast notifications
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((message: string) => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    setToastMessage(message);
+    toastTimerRef.current = setTimeout(() => {
+      setToastMessage(null);
+    }, 2500);
+  }, []);
+
+  // Fetch items from server database for this telegramUserId
+  const syncItemsFromServer = useCallback(async () => {
+    if (!telegramUserId) return;
+    try {
+      const serverItems = await fetchServerItems(telegramUserId);
+      setSavedItems(serverItems);
+      try {
+        localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(serverItems));
+      } catch {}
+    } catch (err) {
+      // Offline fallback: keep local items
+    }
+  }, [telegramUserId]);
+
+  // Initial load + sync when returning to app / tab focus
+  useEffect(() => {
+    syncItemsFromServer();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncItemsFromServer();
+      }
+    };
+
+    const handleFocus = () => {
+      syncItemsFromServer();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    // Periodic poll every 3.5s while visible so shared bot links pop in immediately
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        syncItemsFromServer();
+      }
+    }, 3500);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(pollInterval);
+    };
+  }, [syncItemsFromServer]);
 
   // Dynamic statistics strictly calculated from real saved items
   const totalSaved = savedItems.length;
@@ -93,20 +162,6 @@ export default function App() {
   const [isSaveNoteOpen, setIsSaveNoteOpen] = useState<boolean>(false);
   const [activeDetailItem, setActiveDetailItem] = useState<SavedItem | null>(null);
 
-  // Toast notifications
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const showToast = (message: string) => {
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-    }
-    setToastMessage(message);
-    toastTimerRef.current = setTimeout(() => {
-      setToastMessage(null);
-    }, 2500);
-  };
-
   // Sync saved items to local storage
   useEffect(() => {
     try {
@@ -116,15 +171,32 @@ export default function App() {
     }
   }, [savedItems]);
 
-  // Handlers for Save actions
-  const handleSaveItem = (itemData: Omit<SavedItem, 'id' | 'createdAt'>) => {
-    const newItem: SavedItem = {
-      ...itemData,
-      id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      createdAt: new Date().toISOString(),
-    };
+  // Handlers for Save actions with deduplication
+  const handleSaveItem = async (itemData: Omit<SavedItem, 'id' | 'createdAt'>) => {
+    try {
+      const res = await saveServerItem({
+        ...itemData,
+        telegramUserId,
+      });
 
-    setSavedItems((prev) => [newItem, ...prev]);
+      if (res.isDuplicate) {
+        showToast('Эта ссылка уже сохранена ✓');
+        return;
+      }
+
+      setSavedItems((prev) => [res.item, ...prev.filter((i) => i.id !== res.item.id)]);
+      showToast('Сохранено в SnapKeep ✓');
+    } catch {
+      // Local fallback if server unreachable
+      const newItem: SavedItem = {
+        ...itemData,
+        id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        telegramUserId,
+        createdAt: new Date().toISOString(),
+      };
+      setSavedItems((prev) => [newItem, ...prev]);
+      showToast('Сохранено в SnapKeep ✓');
+    }
   };
 
   // Quick Save from Clipboard
@@ -174,16 +246,22 @@ export default function App() {
   };
 
   // Handler for Deleting an item
-  const handleDeleteItem = (id: string) => {
+  const handleDeleteItem = async (id: string) => {
     setSavedItems((prev) => prev.filter((item) => item.id !== id));
+    try {
+      await deleteServerItem(id);
+    } catch {}
   };
 
   // Handler for updating an item's category
-  const handleUpdateCategory = (id: string, newCategory: CategoryName) => {
+  const handleUpdateCategory = async (id: string, newCategory: CategoryName) => {
     setSavedItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, category: newCategory } : item))
     );
     setActiveDetailItem((prev) => (prev && prev.id === id ? { ...prev, category: newCategory } : prev));
+    try {
+      await updateServerItem(id, { category: newCategory });
+    } catch {}
   };
 
   // Home Screen: Tapping Search opens Saved screen with search active

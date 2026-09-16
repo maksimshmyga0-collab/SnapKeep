@@ -132,8 +132,8 @@ async function startServer() {
 
       const result = await processTelegramUpdate(update, TELEGRAM_BOT_TOKEN);
 
-      // Telegram accepts direct webhook reply in response body:
-      if (result.handled && result.chatId && result.replyText) {
+      // Telegram accepts direct webhook reply in response body if not already sent via API:
+      if (result.handled && result.chatId && result.replyText && !result.replySent) {
         return res.status(200).json({
           method: 'sendMessage',
           chat_id: result.chatId,

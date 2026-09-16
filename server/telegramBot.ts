@@ -40,6 +40,8 @@ export interface ProcessResult {
   duplicatesCount?: number;
   newItemsCount?: number;
   message?: string;
+  replySent?: boolean;
+  deletedOriginalMessage?: boolean;
 }
 
 /**
@@ -68,7 +70,39 @@ export async function sendTelegramMessage(
     }
     return true;
   } catch (err) {
-    console.error('[Telegram API] Failed to reach Telegram:', err);
+    console.error('[Telegram API] Failed to reach Telegram sendMessage:', err);
+    return false;
+  }
+}
+
+/**
+ * Deletes a message via Telegram Bot API deleteMessage.
+ * Errors are caught and logged so message deletion failure never disrupts save or reply flows.
+ */
+export async function deleteTelegramMessage(
+  botToken: string,
+  chatId: number | string,
+  messageId: number
+): Promise<boolean> {
+  if (!botToken || !chatId || !messageId) return false;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/deleteMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        message_id: messageId,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      console.warn(`[Telegram API] Could not delete message ${messageId} in chat ${chatId}:`, err);
+      return false;
+    }
+    const data = await res.json();
+    return Boolean(data.ok && data.result);
+  } catch (err) {
+    console.warn(`[Telegram API] Failed to reach Telegram deleteMessage:`, err);
     return false;
   }
 }
@@ -101,14 +135,16 @@ export async function processTelegramUpdate(
       'Делитесь со мной ссылками из любых приложений (Threads, YouTube, Instagram, браузер и др.) через кнопку «Поделиться», ' +
       'и они будут мгновенно сохраняться в вашей библиотеке SnapKeep.';
 
+    let replySent = false;
     if (botToken) {
-      await sendTelegramMessage(botToken, chatId, welcome);
+      replySent = await sendTelegramMessage(botToken, chatId, welcome);
     }
     return {
       handled: true,
       chatId,
       telegramUserId,
       replyText: welcome,
+      replySent,
     };
   }
 
@@ -120,14 +156,16 @@ export async function processTelegramUpdate(
     // If the message has text without URL, do not save as a link
     // Only inform the user politely if it looks like an intended action
     const replyText = 'Отправьте ссылку, чтобы сохранить её в SnapKeep ✓';
+    let replySent = false;
     if (botToken) {
-      await sendTelegramMessage(botToken, chatId, replyText);
+      replySent = await sendTelegramMessage(botToken, chatId, replyText);
     }
     return {
       handled: true,
       chatId,
       telegramUserId,
       replyText,
+      replySent,
       newItemsCount: 0,
       duplicatesCount: 0,
     };
@@ -171,8 +209,16 @@ export async function processTelegramUpdate(
     }
   }
 
+  // 1. Send the confirmation reply message to user first
+  let replySent = false;
   if (botToken) {
-    await sendTelegramMessage(botToken, chatId, replyText);
+    replySent = await sendTelegramMessage(botToken, chatId, replyText);
+  }
+
+  // 2. Delete the user's original message via deleteMessage after saving and replying
+  let deletedOriginalMessage = false;
+  if (botToken && message.message_id) {
+    deletedOriginalMessage = await deleteTelegramMessage(botToken, chatId, message.message_id);
   }
 
   return {
@@ -180,6 +226,8 @@ export async function processTelegramUpdate(
     chatId,
     telegramUserId,
     replyText,
+    replySent,
+    deletedOriginalMessage,
     savedItems: newItems,
     newItemsCount: newItems.length,
     duplicatesCount: duplicates.length,

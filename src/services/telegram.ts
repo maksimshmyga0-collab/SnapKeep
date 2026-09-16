@@ -11,6 +11,8 @@ declare global {
         expand: () => void;
         close: () => void;
         isExpanded: boolean;
+        initData?: string;
+        platform?: string;
         headerColor?: string;
         backgroundColor?: string;
         setHeaderColor?: (color: string) => void;
@@ -74,7 +76,47 @@ export const readTelegramClipboardText = (): Promise<string | null> => {
 };
 
 export const isTelegramEnvironment = (): boolean => {
-  return typeof window !== 'undefined' && Boolean(window.Telegram?.WebApp?.initDataUnsafe?.user || window.Telegram?.WebApp?.ready);
+  if (typeof window === 'undefined') return false;
+  const webApp = window.Telegram?.WebApp;
+  if (!webApp) return false;
+  // Has Telegram user object
+  if (webApp.initDataUnsafe?.user?.id) return true;
+  // Has non-empty initData string
+  if (typeof webApp.initData === 'string' && webApp.initData.trim().length > 0) return true;
+  // Has platform other than unknown
+  const platform = (webApp as unknown as { platform?: string }).platform;
+  if (platform && platform !== 'unknown') return true;
+  return false;
+};
+
+export const isPreviewOrAllowedBrowser = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  // Inside an iframe (e.g. AI Studio development preview)
+  try {
+    if (window.self !== window.top) return true;
+  } catch {
+    return true;
+  }
+  // URL parameters (?preview=true or ?telegramUserId=...)
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('preview') === 'true' || params.get('telegramUserId') || params.get('userId')) {
+      return true;
+    }
+  } catch {}
+  // Explicit session override
+  try {
+    if (sessionStorage.getItem('snapkeep_allow_browser_preview') === 'true') {
+      return true;
+    }
+  } catch {}
+  return false;
+};
+
+export const allowBrowserPreview = () => {
+  try {
+    sessionStorage.setItem('snapkeep_allow_browser_preview', 'true');
+  } catch {}
 };
 
 export const initTelegramApp = () => {

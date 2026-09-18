@@ -1,11 +1,25 @@
 import fs from 'fs';
 import path from 'path';
 import { SavedItem, CategoryName, SourceKind } from '../src/types';
+import { normalizeUrlForComparison } from './urlUtils';
+import {
+  getFirestore,
+  getUserItemsFirestore,
+  findUserDuplicateFirestore,
+  saveUserItemFirestore,
+  updateUserItemFirestore,
+  deleteUserItemFirestore,
+  SaveItemInput,
+  SaveItemResult,
+} from './firestore';
+
+export { normalizeUrlForComparison };
+export type { SaveItemInput, SaveItemResult };
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DB_FILE = path.resolve(DATA_DIR, 'snapkeep_db.json');
 
-// Ensure data directory exists
+// Ensure data directory exists for local fallback
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -15,8 +29,9 @@ interface DatabaseStructure {
 }
 
 let inMemoryItems: SavedItem[] | null = null;
+let migrationDone = false;
 
-function loadDb(): DatabaseStructure {
+function loadLocalDb(): DatabaseStructure {
   if (inMemoryItems !== null) {
     return { items: inMemoryItems };
   }
@@ -31,69 +46,81 @@ function loadDb(): DatabaseStructure {
       }
     }
   } catch (err) {
-    console.error('[DB] Error reading database file:', err);
+    console.error('[DB] Error reading local database file:', err);
   }
 
   inMemoryItems = [];
   return { items: inMemoryItems };
 }
 
-function persistDb(): void {
+function persistLocalDb(): void {
   try {
     const data: DatabaseStructure = { items: inMemoryItems || [] };
     const tempFile = `${DB_FILE}.tmp`;
     fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), 'utf-8');
     fs.renameSync(tempFile, DB_FILE);
   } catch (err) {
-    console.error('[DB] Error persisting database file:', err);
+    console.error('[DB] Error persisting local database file:', err);
   }
 }
 
 /**
- * Normalizes URL for strict and robust deduplication.
- * Ensures:
- * - lowercase scheme and hostname
- * - trimmed whitespace
- * - removed default ports
- * - normalized trailing slashes
- * - query parameter sorting for identical query comparison
+ * Migrates local JSON records to Firestore if Firestore is active and empty.
  */
-export function normalizeUrlForComparison(rawUrl: string): string {
-  let cleaned = rawUrl.trim();
-  if (!cleaned) return '';
+async function autoMigrateToFirestoreIfNeeded(): Promise<void> {
+  if (migrationDone) return;
+  migrationDone = true;
 
-  if (!/^https?:\/\//i.test(cleaned)) {
-    if (cleaned.startsWith('www.')) {
-      cleaned = 'https://' + cleaned;
-    } else {
-      cleaned = 'https://' + cleaned;
-    }
-  }
+  const db = getFirestore();
+  if (!db) return;
 
   try {
-    const u = new URL(cleaned);
-    const protocol = u.protocol.toLowerCase();
-    const hostname = u.hostname.toLowerCase().replace(/^www\./, '');
-    let pathname = u.pathname;
-    // Normalize trailing slash if it's longer than root '/'
-    if (pathname.length > 1 && pathname.endsWith('/')) {
-      pathname = pathname.slice(0, -1);
+    const snapshot = await db.collection('items').limit(1).get();
+    if (snapshot.empty) {
+      const local = loadLocalDb();
+      if (local.items.length > 0) {
+        console.log(`[Storage Migration] Migrating ${local.items.length} items from local JSON to Firestore...`);
+        const batch = db.batch();
+        for (const it of local.items) {
+          const docRef = db.collection('items').doc(it.id);
+          batch.set(docRef, it);
+        }
+        await batch.commit();
+        console.log('[Storage Migration] Migration completed successfully.');
+      }
     }
-    u.searchParams.sort();
-    const search = u.searchParams.toString() ? `?${u.searchParams.toString()}` : '';
-    return `${protocol}//${hostname}${pathname}${search}`;
-  } catch {
-    return cleaned.toLowerCase().replace(/\/+$/, '');
+  } catch (err) {
+    console.warn('[Storage Migration] Auto-migration check skipped:', err);
   }
+}
+
+/**
+ * Determine if Firestore should be used.
+ * In production, Firestore is prioritized.
+ */
+function isFirestoreEnabled(): boolean {
+  if (process.env.FORCE_LOCAL_DB === 'true') {
+    return false;
+  }
+  return Boolean(getFirestore());
 }
 
 /**
  * Get all items for a specific Telegram user ID.
- * Items are returned sorted newest first.
+ * Returns newest items first.
  */
-export function getUserItems(telegramUserId: string): SavedItem[] {
-  const { items } = loadDb();
-  // Filter by telegramUserId (or fallback to match if no userId is supplied)
+export async function getUserItems(telegramUserId: string): Promise<SavedItem[]> {
+  if (isFirestoreEnabled()) {
+    try {
+      await autoMigrateToFirestoreIfNeeded();
+      return await getUserItemsFirestore(telegramUserId);
+    } catch (err) {
+      console.error('[Firestore Error] getUserItems failed, falling back to local storage:', err);
+    }
+  }
+
+  // Local JSON fallback
+  const { items } = loadLocalDb();
   const userItems = items.filter(
     (item) => String(item.telegramUserId || '') === String(telegramUserId)
   );
@@ -105,12 +132,21 @@ export function getUserItems(telegramUserId: string): SavedItem[] {
 /**
  * Find if a specific URL has already been saved by this Telegram user.
  */
-export function findUserDuplicate(
+export async function findUserDuplicate(
   telegramUserId: string,
   url: string
-): SavedItem | undefined {
+): Promise<SavedItem | undefined> {
   if (!url || !telegramUserId) return undefined;
-  const { items } = loadDb();
+
+  if (isFirestoreEnabled()) {
+    try {
+      return await findUserDuplicateFirestore(telegramUserId, url);
+    } catch (err) {
+      console.error('[Firestore Error] findUserDuplicate failed, checking local:', err);
+    }
+  }
+
+  const { items } = loadLocalDb();
   const normalizedTarget = normalizeUrlForComparison(url);
 
   return items.find((item) => {
@@ -122,33 +158,28 @@ export function findUserDuplicate(
   });
 }
 
-export interface SaveItemInput {
-  telegramUserId: string;
-  url?: string;
-  title: string;
-  sourceKind?: SourceKind;
-  sourceLabel?: string;
-  category?: CategoryName;
-  textContent?: string;
-  createdAt?: string;
-}
-
-export interface SaveItemResult {
-  item: SavedItem;
-  isDuplicate: boolean;
-}
-
 /**
- * Save an item with deduplication check per telegram user.
- * If duplicate, returns existing item with isDuplicate = true.
+ * Save an item with deduplication check per Telegram user.
+ * In Cloud Run production: saved to Firestore.
+ * Fallback: local JSON database.
  */
-export function saveUserItem(input: SaveItemInput): SaveItemResult {
-  const { items } = loadDb();
+export async function saveUserItem(input: SaveItemInput): Promise<SaveItemResult> {
+  if (isFirestoreEnabled()) {
+    try {
+      await autoMigrateToFirestoreIfNeeded();
+      const result = await saveUserItemFirestore(input);
+      return result;
+    } catch (err) {
+      console.error('[Firestore Error] saveUserItem failed, falling back to local:', err);
+    }
+  }
+
+  // Local JSON storage
+  const { items } = loadLocalDb();
   const telegramUserId = String(input.telegramUserId || '').trim();
 
-  // If item has a URL, check for duplicate within this user's library
   if (input.url && telegramUserId) {
-    const existing = findUserDuplicate(telegramUserId, input.url);
+    const existing = await findUserDuplicate(telegramUserId, input.url);
     if (existing) {
       return { item: existing, isDuplicate: true };
     }
@@ -167,7 +198,7 @@ export function saveUserItem(input: SaveItemInput): SaveItemResult {
   };
 
   items.unshift(newItem);
-  persistDb();
+  persistLocalDb();
 
   return { item: newItem, isDuplicate: false };
 }
@@ -175,38 +206,61 @@ export function saveUserItem(input: SaveItemInput): SaveItemResult {
 /**
  * Update an existing item (e.g. category)
  */
-export function updateUserItem(
+export async function updateUserItem(
   id: string,
-  updates: Partial<SavedItem>
-): SavedItem | null {
-  const { items } = loadDb();
+  updates: Partial<SavedItem>,
+  telegramUserId?: string
+): Promise<SavedItem | null> {
+  if (isFirestoreEnabled()) {
+    try {
+      return await updateUserItemFirestore(id, updates, telegramUserId);
+    } catch (err) {
+      console.error('[Firestore Error] updateUserItem failed, trying local:', err);
+    }
+  }
+
+  const { items } = loadLocalDb();
   const index = items.findIndex((i) => i.id === id);
   if (index === -1) return null;
 
   const current = items[index];
+  if (telegramUserId && String(current.telegramUserId || '') !== String(telegramUserId)) {
+    return null;
+  }
+
   const updated: SavedItem = {
     ...current,
     ...updates,
-    id: current.id, // ID must remain immutable
+    id: current.id,
     telegramUserId: current.telegramUserId,
   };
 
   items[index] = updated;
-  persistDb();
+  persistLocalDb();
   return updated;
 }
 
 /**
  * Delete an item by ID
  */
-export function deleteUserItem(id: string): boolean {
-  const { items } = loadDb();
-  const initialLength = items.length;
-  inMemoryItems = items.filter((i) => i.id !== id);
-
-  if (inMemoryItems.length !== initialLength) {
-    persistDb();
-    return true;
+export async function deleteUserItem(id: string, telegramUserId?: string): Promise<boolean> {
+  if (isFirestoreEnabled()) {
+    try {
+      return await deleteUserItemFirestore(id, telegramUserId);
+    } catch (err) {
+      console.error('[Firestore Error] deleteUserItem failed, trying local:', err);
+    }
   }
-  return false;
+
+  const { items } = loadLocalDb();
+  const index = items.findIndex((i) => i.id === id);
+  if (index === -1) return false;
+
+  if (telegramUserId && String(items[index].telegramUserId || '') !== String(telegramUserId)) {
+    return false;
+  }
+
+  inMemoryItems = items.filter((i) => i.id !== id);
+  persistLocalDb();
+  return true;
 }

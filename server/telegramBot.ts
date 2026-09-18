@@ -174,7 +174,7 @@ export async function processTelegramUpdate(
   // Process all URLs for this user
   const results: SaveItemResult[] = [];
   for (const info of extracted) {
-    const res = saveUserItem({
+    const res = await saveUserItem({
       telegramUserId,
       url: info.url,
       title: info.title,

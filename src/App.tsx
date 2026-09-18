@@ -37,18 +37,22 @@ function isCreatedToday(dateStr: string): boolean {
 
 export default function App() {
   // Telegram initialization & legacy demo key cleanup
+  // Current user ID (Telegram user ID or preview fallback)
+  const [telegramUserId, setTelegramUserId] = useState<string>(() => getCurrentTelegramUserId());
+
   useEffect(() => {
     initTelegramApp();
+    const resolvedId = getCurrentTelegramUserId();
+    if (resolvedId && resolvedId !== telegramUserId) {
+      setTelegramUserId(resolvedId);
+    }
     try {
       localStorage.removeItem('snapkeep_saved_items_v2');
       localStorage.removeItem('snapkeep_category_counts_v2');
       localStorage.removeItem('snapkeep_total_saved_v2');
       localStorage.removeItem('snapkeep_today_count_v2');
     } catch {}
-  }, []);
-
-  // Current user ID (Telegram user ID or preview fallback)
-  const [telegramUserId] = useState<string>(() => getCurrentTelegramUserId());
+  }, [telegramUserId]);
 
   // Primary navigation state (Strictly 3 tabs: HOME, SAVED, CATEGORIES)
   const [activeTab, setActiveTab] = useState<MainTab>('HOME');
@@ -249,7 +253,7 @@ export default function App() {
   const handleDeleteItem = async (id: string) => {
     setSavedItems((prev) => prev.filter((item) => item.id !== id));
     try {
-      await deleteServerItem(id);
+      await deleteServerItem(id, telegramUserId);
     } catch {}
   };
 
@@ -260,7 +264,7 @@ export default function App() {
     );
     setActiveDetailItem((prev) => (prev && prev.id === id ? { ...prev, category: newCategory } : prev));
     try {
-      await updateServerItem(id, { category: newCategory });
+      await updateServerItem(id, { category: newCategory }, telegramUserId);
     } catch {}
   };
 

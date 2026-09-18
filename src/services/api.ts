@@ -84,13 +84,15 @@ export async function saveServerItem(
  */
 export async function updateServerItem(
   id: string,
-  updates: Partial<SavedItem>
+  updates: Partial<SavedItem>,
+  telegramUserId?: string
 ): Promise<SavedItem | null> {
   try {
+    const payload = telegramUserId ? { ...updates, telegramUserId } : updates;
     const res = await fetch(`/api/items/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -104,9 +106,12 @@ export async function updateServerItem(
 /**
  * Deletes an item on the shared server database.
  */
-export async function deleteServerItem(id: string): Promise<boolean> {
+export async function deleteServerItem(id: string, telegramUserId?: string): Promise<boolean> {
   try {
-    const res = await fetch(`/api/items/${encodeURIComponent(id)}`, {
+    const url = telegramUserId
+      ? `/api/items/${encodeURIComponent(id)}?telegramUserId=${encodeURIComponent(telegramUserId)}`
+      : `/api/items/${encodeURIComponent(id)}`;
+    const res = await fetch(url, {
       method: 'DELETE',
     });
     if (!res.ok) return false;

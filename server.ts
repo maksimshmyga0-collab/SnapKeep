@@ -17,7 +17,7 @@ import {
 } from './server/telegramBot';
 import { extractUrlsFromTelegramMessage } from './server/urlExtractor';
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 8080;
 
 function resolveBotToken(): string {
   if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_BOT_TOKEN.trim()) {
@@ -26,16 +26,6 @@ function resolveBotToken(): string {
   if (process.env.snapkeep && process.env.snapkeep.trim()) {
     return process.env.snapkeep.trim();
   }
-  try {
-    const devEnvPath = '/app/.dev.env.json';
-    if (fs.existsSync(devEnvPath)) {
-      const data = JSON.parse(fs.readFileSync(devEnvPath, 'utf-8'));
-      const token = data.TELEGRAM_BOT_TOKEN || data.snapkeep || '';
-      if (token && typeof token === 'string' && token.trim()) {
-        return token.trim();
-      }
-    }
-  } catch {}
   return '';
 }
 
@@ -63,62 +53,87 @@ async function startServer() {
   });
 
   // GET /api/items - Retrieve all items for a given telegramUserId
-  app.get('/api/items', (req, res) => {
-    const telegramUserId = String(req.query.telegramUserId || '').trim();
-    if (!telegramUserId) {
-      return res.status(400).json({ error: 'telegramUserId query param is required' });
+  app.get('/api/items', async (req, res) => {
+    try {
+      const telegramUserId = String(req.query.telegramUserId || '').trim();
+      if (!telegramUserId) {
+        return res.status(400).json({ error: 'telegramUserId query param is required' });
+      }
+      const items = await getUserItems(telegramUserId);
+      res.json({ items });
+    } catch (err: any) {
+      console.error('[API /api/items GET error]', err);
+      res.status(500).json({ error: 'Failed to retrieve items' });
     }
-    const items = getUserItems(telegramUserId);
-    res.json({ items });
   });
 
   // POST /api/items - Save a new item (or return existing if duplicate)
-  app.post('/api/items', (req, res) => {
-    const {
-      telegramUserId,
-      url,
-      title,
-      sourceKind,
-      sourceLabel,
-      category,
-      textContent,
-      createdAt,
-    } = req.body;
+  app.post('/api/items', async (req, res) => {
+    try {
+      const {
+        telegramUserId,
+        url,
+        title,
+        sourceKind,
+        sourceLabel,
+        category,
+        textContent,
+        createdAt,
+      } = req.body;
 
-    if (!telegramUserId) {
-      return res.status(400).json({ error: 'telegramUserId is required' });
+      if (!telegramUserId) {
+        return res.status(400).json({ error: 'telegramUserId is required' });
+      }
+
+      const result = await saveUserItem({
+        telegramUserId: String(telegramUserId),
+        url,
+        title: title || (url ? 'Ссылка' : 'Заметка'),
+        sourceKind,
+        sourceLabel,
+        category: category || 'Разное',
+        textContent,
+        createdAt,
+      });
+
+      res.json(result);
+    } catch (err: any) {
+      console.error('[API /api/items POST error]', err);
+      res.status(500).json({ error: 'Failed to save item' });
     }
-
-    const result = saveUserItem({
-      telegramUserId: String(telegramUserId),
-      url,
-      title: title || (url ? 'Ссылка' : 'Заметка'),
-      sourceKind,
-      sourceLabel,
-      category: category || 'Разное',
-      textContent,
-      createdAt,
-    });
-
-    res.json(result);
   });
 
   // PATCH /api/items/:id - Update item (e.g. change category)
-  app.patch('/api/items/:id', (req, res) => {
-    const { id } = req.params;
-    const updates = req.body;
-    const updated = updateUserItem(id, updates);
-    if (!updated) {
-      return res.status(404).json({ error: 'Item not found' });
+  app.patch('/api/items/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { telegramUserId, ...updates } = req.body || {};
+      const userId = telegramUserId || (req.query.telegramUserId as string);
+      const updated = await updateUserItem(id, updates, userId ? String(userId) : undefined);
+      if (!updated) {
+        return res.status(404).json({ error: 'Item not found or unauthorized' });
+      }
+      res.json({ item: updated });
+    } catch (err: any) {
+      console.error('[API /api/items PATCH error]', err);
+      res.status(500).json({ error: 'Failed to update item' });
     }
-    res.json({ item: updated });
   });
 
   // DELETE /api/items/:id - Delete an item
-  app.delete('/api/items/:id', (req, res) => {
-    const { id } = req.params;
-    const success = deleteUserItem(id);
-    res.json({ success });
+  app.delete('/api/items/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const userId = (req.query.telegramUserId as string) || (req.body?.telegramUserId as string);
+      const success = await deleteUserItem(id, userId ? String(userId) : undefined);
+      if (!success) {
+        return res.status(404).json({ error: 'Item not found or unauthorized', success: false });
+      }
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[API /api/items DELETE error]', err);
+      res.status(500).json({ error: 'Failed to delete item', success: false });
+    }
   });
 
   // --------------------------------------------------------------------------

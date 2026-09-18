@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { processTelegramUpdate, TelegramUpdate } from '../../server/telegramBot';
+import { processTelegramUpdate, type TelegramUpdate } from '../../server/telegramBot';
 
 function resolveBotToken(): string {
   if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_BOT_TOKEN.trim()) {

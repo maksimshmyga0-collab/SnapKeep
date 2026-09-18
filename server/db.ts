@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { SavedItem, CategoryName, SourceKind } from '../src/types';
+import type { SavedItem, CategoryName, SourceKind } from './types';
 import { normalizeUrlForComparison } from './urlUtils';
 import {
   isSupabaseConfigured,
@@ -10,8 +10,8 @@ import {
   saveUserItemSupabase,
   updateUserItemSupabase,
   deleteUserItemSupabase,
-  SaveItemInput,
-  SaveItemResult,
+  type SaveItemInput,
+  type SaveItemResult,
 } from './supabase';
 
 export { normalizeUrlForComparison };

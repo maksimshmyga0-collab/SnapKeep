@@ -1,4 +1,4 @@
-import { SourceKind } from '../src/types';
+import type { SourceKind } from './types';
 
 export interface ExtractedUrlInfo {
   url: string;

@@ -1,10 +1,10 @@
 import {
   extractUrlsFromTelegramMessage,
-  ExtractedUrlInfo,
-  TelegramMessagePayload,
+  type ExtractedUrlInfo,
+  type TelegramMessagePayload,
 } from './urlExtractor';
-import { saveUserItem, SaveItemResult } from './db';
-import { SavedItem } from '../src/types';
+import { saveUserItem, type SaveItemResult } from './db';
+import type { SavedItem } from './types';
 
 export interface TelegramUpdate {
   update_id: number;

@@ -1,5 +1,5 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { SavedItem, CategoryName, SourceKind } from '../src/types';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { SavedItem, CategoryName, SourceKind } from './types';
 import { normalizeUrlForComparison } from './urlUtils';
 
 export interface SaveItemInput {

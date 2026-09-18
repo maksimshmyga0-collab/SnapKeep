@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useRef } from 'react';
 import { CategoryName, SavedItem } from '../types';
 import { CATEGORIES } from '../data/initialData';
 import { triggerHaptic } from '../services/telegram';
-import { readClipboardUrlSafely, formatShortUrl, normalizeUrl } from '../services/clipboard';
+import { readClipboardUrlSafely, normalizeUrl, isClipboardDenied } from '../services/clipboard';
 
 interface HomeViewProps {
   totalSaved: number;
@@ -29,76 +29,19 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onSaveClipboardLink,
   onShowToast,
 }) => {
-  // Detected clipboard link state
-  const [detectedClipboardUrl, setDetectedClipboardUrl] = useState<string | null>(null);
   const lastSavedUrlRef = useRef<string | null>(null);
 
-  // Check clipboard safely without throwing errors or showing alerts
-  const checkClipboard = useCallback(async () => {
-    try {
-      const validUrl = await readClipboardUrlSafely();
-      // If user just saved this exact URL in this session, don't re-show the hint
-      if (validUrl && validUrl === lastSavedUrlRef.current) {
-        return;
-      }
-      setDetectedClipboardUrl(validUrl);
-    } catch {
-      // Handled silently
-    }
-  }, []);
-
-  // Check clipboard:
-  // 1. When Home is opened/mounted
-  // 2. When returning to window/tab (focus, visibilitychange)
-  // 3. On initial touch/pointerdown (user interaction unlocks browser clipboard permissions)
-  useEffect(() => {
-    checkClipboard();
-
-    // Secondary checks in case browser document focus was established shortly after mount
-    const timer1 = setTimeout(checkClipboard, 350);
-    const timer2 = setTimeout(checkClipboard, 900);
-
-    const handleFocus = () => {
-      checkClipboard();
-      setTimeout(checkClipboard, 150);
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        checkClipboard();
-        setTimeout(checkClipboard, 150);
-      }
-    };
-
-    const handlePointerDown = () => {
-      checkClipboard();
-    };
-
-    window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('pointerdown', handlePointerDown, { passive: true });
-
-    return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('pointerdown', handlePointerDown);
-    };
-  }, [checkClipboard]);
-
-  // Main Save button handler
+  // Main Save button handler - executed ONLY on direct user tap
   const handleMainSaveClick = async () => {
-    // Check clipboard directly on tap (highest privilege user gesture)
     let urlToSave: string | null = null;
-    try {
-      urlToSave = await readClipboardUrlSafely();
-    } catch {
-      // Safe fallback
-    }
 
-    if (!urlToSave) {
-      urlToSave = detectedClipboardUrl;
+    // Only attempt clipboard read if user hasn't previously denied permission
+    if (!isClipboardDenied()) {
+      try {
+        urlToSave = await readClipboardUrlSafely();
+      } catch {
+        // Handled silently
+      }
     }
 
     // If a valid URL is found in clipboard:
@@ -110,7 +53,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
       if (isDuplicate) {
         triggerHaptic('medium');
-        onShowToast('Эта ссылка уже сохранена');
+        onShowToast('Эта ссылка уже сохранена ✓');
         return;
       }
 
@@ -118,12 +61,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
       triggerHaptic('success');
       lastSavedUrlRef.current = urlToSave;
       onSaveClipboardLink(urlToSave);
-      setDetectedClipboardUrl(null);
-      onShowToast('Сохранено');
+      onShowToast('Сохранено в SnapKeep ✓');
       return;
     }
 
-    // Fallback: If no URL in clipboard, open the standard Save Link modal
+    // Fallback: If no valid URL in clipboard or access denied/empty, open the standard Save Link modal
     triggerHaptic('medium');
     onOpenSaveLink();
   };
@@ -281,18 +223,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </svg>
             <span>Сохранить</span>
           </button>
-
-          {/* Compact string under "Сохранить" shown only when clipboard contains a link */}
-          {detectedClipboardUrl && (
-            <div className="text-center pt-0.5 animate-in fade-in duration-200">
-              <span
-                className="text-[#8E939C] font-normal truncate block max-w-full px-2"
-                style={{ fontSize: '12px', lineHeight: '15px' }}
-              >
-                Из буфера: {formatShortUrl(detectedClipboardUrl)}
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Secondary actions: Ссылка & Заметка (Matte tactile surfaces) */}

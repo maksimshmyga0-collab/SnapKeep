@@ -1,6 +1,20 @@
 import { readTelegramClipboardText } from './telegram';
 
 /**
+ * Tracks if the user/browser explicitly denied clipboard access in the current session.
+ * Once denied, we never re-request clipboard access automatically.
+ */
+let isClipboardDeniedInSession = false;
+
+export function isClipboardDenied(): boolean {
+  return isClipboardDeniedInSession;
+}
+
+export function setClipboardDenied(denied: boolean): void {
+  isClipboardDeniedInSession = denied;
+}
+
+/**
  * Validates whether a string is a standard URL.
  * Supports http://, https://, and www. links.
  * Strictly ignores plain text.
@@ -61,7 +75,7 @@ export function extractValidUrl(text: string | null | undefined): string | null 
 }
 
 /**
- * Formats a URL for compact single-line display under the Save button.
+ * Formats a URL for compact single-line display.
  * Example: "youtube.com/watch..." or "instagram.com/p/..."
  */
 export function formatShortUrl(urlStr: string): string {
@@ -113,30 +127,64 @@ export function normalizeUrl(url: string | undefined): string {
 }
 
 /**
- * Reads clipboard safely using standard browser Clipboard API,
- * with Telegram WebApp bridge fallback. Never throws or crashes.
+ * Reads plain text from clipboard upon an explicit user action (e.g. tapping "Вставить").
+ * Checks session denial flag and catches security rejections gracefully.
  */
-export async function readClipboardUrlSafely(): Promise<string | null> {
-  // 1. First attempt standard browser Clipboard API
-  if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
-    try {
-      const text = await navigator.clipboard.readText();
-      const valid = extractValidUrl(text);
-      if (valid) return valid;
-    } catch {
-      // Permission denied or document not focused in iframe - handled silently
+export async function readClipboardTextSafely(): Promise<string | null> {
+  if (isClipboardDeniedInSession) {
+    return null;
+  }
+
+  // 1. Try Telegram WebApp API if in Telegram environment
+  try {
+    const tgText = await readTelegramClipboardText();
+    if (tgText && tgText.trim()) {
+      return tgText.trim();
+    }
+  } catch (err: any) {
+    if (err?.name === 'NotAllowedError' || String(err).toLowerCase().includes('denied')) {
+      isClipboardDeniedInSession = true;
+      return null;
     }
   }
 
-  // 2. Telegram WebApp bridge fallback (for Telegram Mini App environment)
-  try {
-    const tgText = await readTelegramClipboardText();
-    const validTg = extractValidUrl(tgText);
-    if (validTg) return validTg;
-  } catch {
-    // Handled silently
+  // 2. Standard browser Clipboard API fallback
+  if (
+    typeof navigator !== 'undefined' &&
+    navigator.clipboard &&
+    typeof navigator.clipboard.readText === 'function'
+  ) {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text && text.trim()) {
+        return text.trim();
+      }
+    } catch (err: any) {
+      if (err?.name === 'NotAllowedError' || String(err).toLowerCase().includes('denied')) {
+        isClipboardDeniedInSession = true;
+        return null;
+      }
+    }
   }
 
   return null;
 }
+
+/**
+ * Reads clipboard safely looking for a valid URL upon an explicit user action.
+ * Never throws or crashes. Respects user permission denials.
+ */
+export async function readClipboardUrlSafely(): Promise<string | null> {
+  if (isClipboardDeniedInSession) {
+    return null;
+  }
+
+  const rawText = await readClipboardTextSafely();
+  if (rawText) {
+    return extractValidUrl(rawText);
+  }
+
+  return null;
+}
+
 

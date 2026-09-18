@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CategoryName, SavedItem } from '../types';
 import { CATEGORIES } from '../data/initialData';
 import { triggerHaptic } from '../services/telegram';
+import { readClipboardTextSafely } from '../services/clipboard';
 import { BottomSheet } from './BottomSheet';
 
 interface SaveLinkSheetProps {
@@ -35,6 +36,26 @@ export const SaveLinkSheet: React.FC<SaveLinkSheetProps> = ({
   const handleSelectCategory = (cat: CategoryName) => {
     triggerHaptic('selection');
     setSelectedCategory(cat);
+  };
+
+  const handlePasteFromClipboard = async () => {
+    triggerHaptic('light');
+    try {
+      const text = await readClipboardTextSafely();
+      if (text) {
+        setUrl(text);
+        if (!title.trim()) {
+          try {
+            const formatted = /^https?:\/\//i.test(text) ? text : `https://${text}`;
+            const parsed = new URL(formatted);
+            const host = parsed.hostname.replace(/^www\./, '');
+            setTitle(host);
+          } catch {}
+        }
+      }
+    } catch {
+      // Handled silently
+    }
   };
 
   const handleConfirm = () => {
@@ -117,9 +138,32 @@ export const SaveLinkSheet: React.FC<SaveLinkSheetProps> = ({
 
         {/* Input: URL */}
         <div className="mb-3.5">
-          <label className="block text-[12px] font-normal text-[#8E939C] mb-1.5">
-            Ссылка или адрес
-          </label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-[12px] font-normal text-[#8E939C]">
+              Ссылка или адрес
+            </label>
+            <button
+              id="paste-clipboard-button"
+              type="button"
+              onClick={handlePasteFromClipboard}
+              className="text-[12px] font-normal text-[#9FA4AE] hover:text-[#F2F3F5] transition-colors cursor-pointer flex items-center gap-1 active:opacity-75"
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              <span>Вставить</span>
+            </button>
+          </div>
           <input
             id="link-url-input"
             type="url"

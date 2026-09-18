@@ -6,6 +6,62 @@ import {
 import { saveUserItem, type SaveItemResult } from './db.js';
 import type { SavedItem } from './types.js';
 
+export const DEFAULT_APP_URL = 'https://snap-keep-omega.vercel.app';
+
+/**
+ * Normalizes any app URL to ensure valid protocol and removes trailing slashes.
+ * Defaults to the production URL: https://snap-keep-omega.vercel.app
+ */
+export function normalizeAppUrl(rawUrl?: string): string {
+  if (!rawUrl || !rawUrl.trim()) return DEFAULT_APP_URL;
+  let clean = rawUrl.trim().replace(/^['"]|['"]$/g, '').replace(/\/+$/, '');
+  if (!clean) return DEFAULT_APP_URL;
+  if (!/^https?:\/\//i.test(clean)) {
+    clean = `https://${clean}`;
+  }
+  return clean;
+}
+
+/**
+ * Returns the resolved public application URL.
+ */
+export function getAppUrl(): string {
+  return normalizeAppUrl(process.env.APP_URL);
+}
+
+/**
+ * Returns the exact Telegram Webhook URL.
+ */
+export function getWebhookUrl(appUrl?: string): string {
+  const base = normalizeAppUrl(appUrl || process.env.APP_URL);
+  return `${base}/api/telegram/webhook`;
+}
+
+/**
+ * Safely resolves the Telegram bot token from environment variables.
+ */
+export function getBotToken(): string {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  return token ? token.trim().replace(/^['"]|['"]$/g, '') : '';
+}
+
+/**
+ * Generates an inline keyboard button to open the SnapKeep Mini App inside Telegram.
+ */
+export function getMiniAppKeyboard(appUrl?: string) {
+  const url = normalizeAppUrl(appUrl);
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: 'Открыть SnapKeep',
+          web_app: { url },
+        },
+      ],
+    ],
+  };
+}
+
 export interface TelegramUpdate {
   update_id: number;
   message?: {
@@ -34,6 +90,7 @@ export interface TelegramUpdate {
 export interface ProcessResult {
   handled: boolean;
   replyText?: string;
+  replyMarkup?: any;
   chatId?: number;
   telegramUserId?: string;
   savedItems?: SavedItem[];
@@ -45,23 +102,29 @@ export interface ProcessResult {
 }
 
 /**
- * Sends a message via Telegram Bot API
+ * Sends a message via Telegram Bot API with optional inline markup
  */
 export async function sendTelegramMessage(
   botToken: string,
   chatId: number | string,
-  text: string
+  text: string,
+  replyMarkup?: any
 ): Promise<boolean> {
   if (!botToken || !chatId) return false;
   try {
+    const payload: Record<string, any> = {
+      chat_id: chatId,
+      text,
+      disable_web_page_preview: true,
+    };
+    if (replyMarkup) {
+      payload.reply_markup = replyMarkup;
+    }
+
     const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        disable_web_page_preview: true,
-      }),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) {
       const err = await res.text();
@@ -126,6 +189,7 @@ export async function processTelegramUpdate(
     return { handled: false, message: 'Missing from.id or chat.id' };
   }
 
+  const resolvedToken = botToken || getBotToken();
   const textContent = (message.text || message.caption || '').trim();
 
   // Handle /start command
@@ -135,15 +199,17 @@ export async function processTelegramUpdate(
       'Делитесь со мной ссылками из любых приложений (Threads, YouTube, Instagram, браузер и др.) через кнопку «Поделиться», ' +
       'и они будут мгновенно сохраняться в вашей библиотеке SnapKeep.';
 
+    const replyMarkup = getMiniAppKeyboard();
     let replySent = false;
-    if (botToken) {
-      replySent = await sendTelegramMessage(botToken, chatId, welcome);
+    if (resolvedToken) {
+      replySent = await sendTelegramMessage(resolvedToken, chatId, welcome, replyMarkup);
     }
     return {
       handled: true,
       chatId,
       telegramUserId,
       replyText: welcome,
+      replyMarkup,
       replySent,
     };
   }
@@ -151,20 +217,20 @@ export async function processTelegramUpdate(
   // Extract all URLs from message text, caption, and entities
   const extracted = extractUrlsFromTelegramMessage(message as TelegramMessagePayload);
 
-  // If no URLs were found
+  // If no URLs were found: do NOT save anything to database
   if (extracted.length === 0) {
-    // If the message has text without URL, do not save as a link
-    // Only inform the user politely if it looks like an intended action
     const replyText = 'Отправьте ссылку, чтобы сохранить её в SnapKeep ✓';
+    const replyMarkup = getMiniAppKeyboard();
     let replySent = false;
-    if (botToken) {
-      replySent = await sendTelegramMessage(botToken, chatId, replyText);
+    if (resolvedToken) {
+      replySent = await sendTelegramMessage(resolvedToken, chatId, replyText, replyMarkup);
     }
     return {
       handled: true,
       chatId,
       telegramUserId,
       replyText,
+      replyMarkup,
       replySent,
       newItemsCount: 0,
       duplicatesCount: 0,
@@ -209,16 +275,18 @@ export async function processTelegramUpdate(
     }
   }
 
-  // 1. Send the confirmation reply message to user first
+  const replyMarkup = getMiniAppKeyboard();
+
+  // 1. Send the confirmation reply message to user
   let replySent = false;
-  if (botToken) {
-    replySent = await sendTelegramMessage(botToken, chatId, replyText);
+  if (resolvedToken) {
+    replySent = await sendTelegramMessage(resolvedToken, chatId, replyText, replyMarkup);
   }
 
   // 2. Delete the user's original message via deleteMessage after saving and replying
   let deletedOriginalMessage = false;
-  if (botToken && message.message_id) {
-    deletedOriginalMessage = await deleteTelegramMessage(botToken, chatId, message.message_id);
+  if (resolvedToken && message.message_id) {
+    deletedOriginalMessage = await deleteTelegramMessage(resolvedToken, chatId, message.message_id);
   }
 
   return {
@@ -226,6 +294,7 @@ export async function processTelegramUpdate(
     chatId,
     telegramUserId,
     replyText,
+    replyMarkup,
     replySent,
     deletedOriginalMessage,
     savedItems: newItems,
@@ -235,30 +304,28 @@ export async function processTelegramUpdate(
 }
 
 /**
- * Automatically registers the webhook with Telegram Bot API
+ * Registers the webhook with Telegram Bot API
  */
 export async function registerWebhookWithTelegram(
-  botToken: string,
-  appUrl: string
-): Promise<{ success: boolean; data?: any; error?: string }> {
-  if (!botToken) {
-    return { success: false, error: 'TELEGRAM_BOT_TOKEN is not configured' };
+  botToken?: string,
+  appUrl?: string
+): Promise<{ success: boolean; webhookUrl: string; data?: any; error?: string }> {
+  const token = botToken || getBotToken();
+  if (!token) {
+    return { success: false, webhookUrl: '', error: 'TELEGRAM_BOT_TOKEN is not configured' };
   }
-  if (!appUrl) {
-    return { success: false, error: 'APP_URL is not configured' };
-  }
-
-  const webhookUrl = `${appUrl.replace(/\/+$/, '')}/api/telegram/webhook`;
+  const cleanAppUrl = normalizeAppUrl(appUrl);
+  const webhookUrl = getWebhookUrl(cleanAppUrl);
 
   try {
     const res = await fetch(
-      `https://api.telegram.org/bot${botToken}/setWebhook?url=${encodeURIComponent(webhookUrl)}&drop_pending_updates=true`,
+      `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webhookUrl)}&drop_pending_updates=true`,
       { method: 'POST' }
     );
     const data = await res.json();
-    return { success: data.ok === true, data };
+    return { success: data.ok === true, webhookUrl, data };
   } catch (err: any) {
-    return { success: false, error: err.message };
+    return { success: false, webhookUrl, error: err.message };
   }
 }
 
@@ -266,14 +333,15 @@ export async function registerWebhookWithTelegram(
  * Checks current webhook status from Telegram Bot API
  */
 export async function getWebhookStatus(
-  botToken: string
+  botToken?: string
 ): Promise<{ success: boolean; data?: any; error?: string }> {
-  if (!botToken) {
+  const token = botToken || getBotToken();
+  if (!token) {
     return { success: false, error: 'TELEGRAM_BOT_TOKEN is not configured' };
   }
 
   try {
-    const res = await fetch(`https://api.telegram.org/bot${botToken}/getWebhookInfo`);
+    const res = await fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`);
     const data = await res.json();
     return { success: data.ok === true, data };
   } catch (err: any) {

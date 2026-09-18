@@ -1,35 +1,31 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getWebhookStatus } from '../../server/telegramBot.js';
-
-function resolveBotToken(): string {
-  if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_BOT_TOKEN.trim()) {
-    return process.env.TELEGRAM_BOT_TOKEN.trim();
-  }
-  if (process.env.snapkeep && process.env.snapkeep.trim()) {
-    return process.env.snapkeep.trim();
-  }
-  return '';
-}
+import {
+  getWebhookStatus,
+  getBotToken,
+  normalizeAppUrl,
+  getWebhookUrl,
+} from '../../server/telegramBot.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const botToken = resolveBotToken();
-    const appUrl = process.env.APP_URL || '';
+    const botToken = getBotToken();
+    const appUrl = normalizeAppUrl(process.env.APP_URL);
+    const expectedWebhookUrl = getWebhookUrl(appUrl);
 
     if (!botToken) {
       return res.status(200).json({
         configured: false,
         message: 'TELEGRAM_BOT_TOKEN is not configured',
-        appUrl: appUrl || null,
-        expectedWebhookUrl: appUrl ? `${appUrl.replace(/\/+$/, '')}/api/telegram/webhook` : null,
+        appUrl,
+        expectedWebhookUrl,
       });
     }
 
     const status = await getWebhookStatus(botToken);
     return res.status(200).json({
       configured: true,
-      appUrl: appUrl || null,
-      expectedWebhookUrl: appUrl ? `${appUrl.replace(/\/+$/, '')}/api/telegram/webhook` : null,
+      appUrl,
+      expectedWebhookUrl,
       telegramStatus: status,
     });
   } catch (err: any) {
@@ -41,3 +37,4 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 }
+

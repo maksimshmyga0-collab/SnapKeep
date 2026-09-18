@@ -13,24 +13,17 @@ import {
   processTelegramUpdate,
   registerWebhookWithTelegram,
   getWebhookStatus,
+  getBotToken,
+  normalizeAppUrl,
+  getWebhookUrl,
   type TelegramUpdate,
 } from './server/telegramBot.js';
 import { extractUrlsFromTelegramMessage } from './server/urlExtractor.js';
 
 const PORT = Number(process.env.PORT) || 8080;
 
-function resolveBotToken(): string {
-  if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_BOT_TOKEN.trim()) {
-    return process.env.TELEGRAM_BOT_TOKEN.trim();
-  }
-  if (process.env.snapkeep && process.env.snapkeep.trim()) {
-    return process.env.snapkeep.trim();
-  }
-  return '';
-}
-
-const TELEGRAM_BOT_TOKEN = resolveBotToken();
-const APP_URL = process.env.APP_URL || '';
+const TELEGRAM_BOT_TOKEN = getBotToken();
+const APP_URL = normalizeAppUrl(process.env.APP_URL);
 
 async function startServer() {
   const app = express();
@@ -203,36 +196,39 @@ async function startServer() {
   app.all('/api/telegram/set-webhook', async (req, res) => {
     if (!TELEGRAM_BOT_TOKEN) {
       return res.status(400).json({
+        ok: false,
         error: 'TELEGRAM_BOT_TOKEN environment variable is not set.',
       });
     }
-    const appUrl = (req.query.appUrl as string) || (req.body.appUrl as string) || APP_URL;
-    if (!appUrl) {
-      return res.status(400).json({
-        error: 'APP_URL is not set and was not provided in request.',
-      });
-    }
+    const rawAppUrl = (req.query.appUrl as string) || (req.body?.appUrl as string) || APP_URL;
+    const targetAppUrl = normalizeAppUrl(rawAppUrl);
+    const expectedWebhookUrl = getWebhookUrl(targetAppUrl);
 
-    const regResult = await registerWebhookWithTelegram(TELEGRAM_BOT_TOKEN, appUrl);
-    res.json(regResult);
+    const regResult = await registerWebhookWithTelegram(TELEGRAM_BOT_TOKEN, targetAppUrl);
+    res.json({
+      ...regResult,
+      targetAppUrl,
+      expectedWebhookUrl,
+    });
   });
 
   // GET /api/telegram/status - Get current webhook information
   app.get('/api/telegram/status', async (req, res) => {
+    const expectedWebhookUrl = getWebhookUrl(APP_URL);
     if (!TELEGRAM_BOT_TOKEN) {
       return res.json({
         configured: false,
         message: 'TELEGRAM_BOT_TOKEN is not configured',
-        appUrl: APP_URL || null,
-        expectedWebhookUrl: APP_URL ? `${APP_URL}/api/telegram/webhook` : null,
+        appUrl: APP_URL,
+        expectedWebhookUrl,
       });
     }
 
     const status = await getWebhookStatus(TELEGRAM_BOT_TOKEN);
     res.json({
       configured: true,
-      appUrl: APP_URL || null,
-      expectedWebhookUrl: APP_URL ? `${APP_URL}/api/telegram/webhook` : null,
+      appUrl: APP_URL,
+      expectedWebhookUrl,
       telegramStatus: status,
     });
   });
@@ -254,18 +250,8 @@ async function startServer() {
     });
   }
 
-  // Attempt automatic webhook registration if both token and URL are present
-  if (TELEGRAM_BOT_TOKEN && APP_URL) {
-    registerWebhookWithTelegram(TELEGRAM_BOT_TOKEN, APP_URL)
-      .then((r) => {
-        if (r.success) {
-          console.log(`[Telegram] Webhook successfully registered at: ${APP_URL}/api/telegram/webhook`);
-        } else {
-          console.warn(`[Telegram] Webhook auto-registration note:`, r.error || r.data);
-        }
-      })
-      .catch((e) => console.warn('[Telegram] Auto-registration failed:', e));
-  }
+  // Note: Webhook is NOT registered automatically on startup.
+  // Use /api/telegram/set-webhook for controlled registration.
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[SnapKeep Server] Running on http://localhost:${PORT}`);

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import type { SavedItem, CategoryName, SourceKind } from './types';
-import { normalizeUrlForComparison } from './urlUtils';
+import type { SavedItem, CategoryName, SourceKind } from './types.js';
+import { normalizeUrlForComparison } from './urlUtils.js';
 import {
   isSupabaseConfigured,
   getSupabase,
@@ -12,12 +12,13 @@ import {
   deleteUserItemSupabase,
   type SaveItemInput,
   type SaveItemResult,
-} from './supabase';
+} from './supabase.js';
 
 export { normalizeUrlForComparison };
 export type { SaveItemInput, SaveItemResult };
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const DATA_DIR = isServerless ? '/tmp' : path.resolve(process.cwd(), 'data');
 const DB_FILE = path.resolve(DATA_DIR, 'snapkeep_db.json');
 
 // Local in-memory cache for development fallback
@@ -34,8 +35,12 @@ function loadLocalDb(): DatabaseStructure {
   }
 
   try {
-    if (fs.existsSync(DB_FILE)) {
-      const content = fs.readFileSync(DB_FILE, 'utf-8');
+    const candidateFile = fs.existsSync(DB_FILE)
+      ? DB_FILE
+      : path.resolve(process.cwd(), 'data', 'snapkeep_db.json');
+
+    if (fs.existsSync(candidateFile)) {
+      const content = fs.readFileSync(candidateFile, 'utf-8');
       const parsed = JSON.parse(content);
       if (parsed && Array.isArray(parsed.items)) {
         inMemoryItems = parsed.items;
@@ -80,7 +85,12 @@ async function autoMigrateToSupabaseIfNeeded(): Promise<void> {
       .from('items')
       .select('*', { count: 'exact', head: true });
 
-    if (!error && (count === 0 || count === null)) {
+    if (error) {
+      console.warn('[Storage Migration] Supabase items check skipped:', error.message);
+      return;
+    }
+
+    if (count === 0 || count === null) {
       const local = loadLocalDb();
       if (local.items.length > 0) {
         console.log(`[Storage Migration] Migrating ${local.items.length} items from local JSON to Supabase...`);
@@ -117,8 +127,8 @@ export async function getUserItems(telegramUserId: string): Promise<SavedItem[]>
     try {
       await autoMigrateToSupabaseIfNeeded();
       return await getUserItemsSupabase(telegramUserId);
-    } catch (err) {
-      console.error('[Supabase Error] getUserItems failed, checking local fallback:', err);
+    } catch (err: any) {
+      console.error('[Supabase Error] getUserItems failed, checking local fallback:', err?.message || err);
     }
   }
 

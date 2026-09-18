@@ -1,4 +1,4 @@
-import type { SourceKind } from './types';
+import type { SourceKind } from './types.js';
 
 export interface ExtractedUrlInfo {
   url: string;

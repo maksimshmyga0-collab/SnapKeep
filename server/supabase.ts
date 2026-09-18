@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { SavedItem, CategoryName, SourceKind } from './types';
-import { normalizeUrlForComparison } from './urlUtils';
+import type { SavedItem, CategoryName, SourceKind } from './types.js';
+import { normalizeUrlForComparison } from './urlUtils.js';
 
 export interface SaveItemInput {
   telegramUserId: string;
@@ -46,12 +46,19 @@ export function isSupabaseConfigured(): boolean {
 export function getSupabase(): SupabaseClient | null {
   if (supabaseClient) return supabaseClient;
 
-  const url = process.env.SUPABASE_URL?.trim();
-  const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY)?.trim();
+  const rawUrl = process.env.SUPABASE_URL?.trim();
+  const rawKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY)?.trim();
 
-  if (!url || !serviceKey) {
+  if (!rawUrl || !rawKey) {
     return null;
   }
+
+  let url = rawUrl.replace(/^['"]|['"]$/g, '');
+  if (!/^https?:\/\//i.test(url)) {
+    url = `https://${url}`;
+  }
+
+  const serviceKey = rawKey.replace(/^['"]|['"]$/g, '');
 
   supabaseClient = createClient(url, serviceKey, {
     auth: {

@@ -8,14 +8,14 @@ import {
   updateUserItem,
   deleteUserItem,
   findUserDuplicate,
-} from './server/db';
+} from './server/db.js';
 import {
   processTelegramUpdate,
   registerWebhookWithTelegram,
   getWebhookStatus,
-  TelegramUpdate,
-} from './server/telegramBot';
-import { extractUrlsFromTelegramMessage } from './server/urlExtractor';
+  type TelegramUpdate,
+} from './server/telegramBot.js';
+import { extractUrlsFromTelegramMessage } from './server/urlExtractor.js';
 
 const PORT = Number(process.env.PORT) || 8080;
 

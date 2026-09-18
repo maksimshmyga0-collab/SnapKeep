@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getWebhookStatus } from '../../server/telegramBot';
+import { getWebhookStatus } from '../../server/telegramBot.js';
 
 function resolveBotToken(): string {
   if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_BOT_TOKEN.trim()) {
@@ -12,23 +12,32 @@ function resolveBotToken(): string {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const botToken = resolveBotToken();
-  const appUrl = process.env.APP_URL || '';
+  try {
+    const botToken = resolveBotToken();
+    const appUrl = process.env.APP_URL || '';
 
-  if (!botToken) {
+    if (!botToken) {
+      return res.status(200).json({
+        configured: false,
+        message: 'TELEGRAM_BOT_TOKEN is not configured',
+        appUrl: appUrl || null,
+        expectedWebhookUrl: appUrl ? `${appUrl.replace(/\/+$/, '')}/api/telegram/webhook` : null,
+      });
+    }
+
+    const status = await getWebhookStatus(botToken);
     return res.status(200).json({
-      configured: false,
-      message: 'TELEGRAM_BOT_TOKEN is not configured',
+      configured: true,
       appUrl: appUrl || null,
       expectedWebhookUrl: appUrl ? `${appUrl.replace(/\/+$/, '')}/api/telegram/webhook` : null,
+      telegramStatus: status,
+    });
+  } catch (err: any) {
+    console.error('[Vercel API /api/telegram/status error]', err);
+    return res.status(500).json({
+      configured: false,
+      error: 'Failed to retrieve Telegram status',
+      details: err?.message || 'Unknown error',
     });
   }
-
-  const status = await getWebhookStatus(botToken);
-  return res.status(200).json({
-    configured: true,
-    appUrl: appUrl || null,
-    expectedWebhookUrl: appUrl ? `${appUrl.replace(/\/+$/, '')}/api/telegram/webhook` : null,
-    telegramStatus: status,
-  });
 }

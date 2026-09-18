@@ -3,15 +3,16 @@ import path from 'path';
 import { SavedItem, CategoryName, SourceKind } from '../src/types';
 import { normalizeUrlForComparison } from './urlUtils';
 import {
-  getFirestore,
-  getUserItemsFirestore,
-  findUserDuplicateFirestore,
-  saveUserItemFirestore,
-  updateUserItemFirestore,
-  deleteUserItemFirestore,
+  isSupabaseConfigured,
+  getSupabase,
+  getUserItemsSupabase,
+  findUserDuplicateSupabase,
+  saveUserItemSupabase,
+  updateUserItemSupabase,
+  deleteUserItemSupabase,
   SaveItemInput,
   SaveItemResult,
-} from './firestore';
+} from './supabase';
 
 export { normalizeUrlForComparison };
 export type { SaveItemInput, SaveItemResult };
@@ -19,17 +20,13 @@ export type { SaveItemInput, SaveItemResult };
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DB_FILE = path.resolve(DATA_DIR, 'snapkeep_db.json');
 
-// Ensure data directory exists for local fallback
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-
+// Local in-memory cache for development fallback
 interface DatabaseStructure {
   items: SavedItem[];
 }
 
 let inMemoryItems: SavedItem[] | null = null;
-let migrationDone = false;
+let migrationChecked = false;
 
 function loadLocalDb(): DatabaseStructure {
   if (inMemoryItems !== null) {
@@ -46,7 +43,7 @@ function loadLocalDb(): DatabaseStructure {
       }
     }
   } catch (err) {
-    console.error('[DB] Error reading local database file:', err);
+    console.error('[DB Fallback] Error reading local db file:', err);
   }
 
   inMemoryItems = [];
@@ -55,54 +52,60 @@ function loadLocalDb(): DatabaseStructure {
 
 function persistLocalDb(): void {
   try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
     const data: DatabaseStructure = { items: inMemoryItems || [] };
     const tempFile = `${DB_FILE}.tmp`;
     fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), 'utf-8');
     fs.renameSync(tempFile, DB_FILE);
   } catch (err) {
-    console.error('[DB] Error persisting local database file:', err);
+    console.error('[DB Fallback] Error persisting local db file:', err);
   }
 }
 
 /**
- * Migrates local JSON records to Firestore if Firestore is active and empty.
+ * Migrates local development items to Supabase if Supabase is active and empty.
  */
-async function autoMigrateToFirestoreIfNeeded(): Promise<void> {
-  if (migrationDone) return;
-  migrationDone = true;
+async function autoMigrateToSupabaseIfNeeded(): Promise<void> {
+  if (migrationChecked) return;
+  migrationChecked = true;
 
-  const db = getFirestore();
-  if (!db) return;
+  if (!isSupabaseConfigured()) return;
+  const client = getSupabase();
+  if (!client) return;
 
   try {
-    const snapshot = await db.collection('items').limit(1).get();
-    if (snapshot.empty) {
+    const { count, error } = await client
+      .from('items')
+      .select('*', { count: 'exact', head: true });
+
+    if (!error && (count === 0 || count === null)) {
       const local = loadLocalDb();
       if (local.items.length > 0) {
-        console.log(`[Storage Migration] Migrating ${local.items.length} items from local JSON to Firestore...`);
-        const batch = db.batch();
-        for (const it of local.items) {
-          const docRef = db.collection('items').doc(it.id);
-          batch.set(docRef, it);
+        console.log(`[Storage Migration] Migrating ${local.items.length} items from local JSON to Supabase...`);
+        for (const item of local.items) {
+          try {
+            await saveUserItemSupabase({
+              telegramUserId: item.telegramUserId || 'unknown',
+              url: item.url,
+              title: item.title,
+              sourceKind: item.sourceKind,
+              sourceLabel: item.sourceLabel,
+              category: item.category,
+              textContent: item.textContent,
+              createdAt: item.createdAt,
+            });
+          } catch (e) {
+            // Ignore duplicate or individual item migration warnings
+          }
         }
-        await batch.commit();
-        console.log('[Storage Migration] Migration completed successfully.');
+        console.log('[Storage Migration] Migration to Supabase finished.');
       }
     }
   } catch (err) {
-    console.warn('[Storage Migration] Auto-migration check skipped:', err);
+    console.warn('[Storage Migration] Migration check skipped:', err);
   }
-}
-
-/**
- * Determine if Firestore should be used.
- * In production, Firestore is prioritized.
- */
-function isFirestoreEnabled(): boolean {
-  if (process.env.FORCE_LOCAL_DB === 'true') {
-    return false;
-  }
-  return Boolean(getFirestore());
 }
 
 /**
@@ -110,16 +113,16 @@ function isFirestoreEnabled(): boolean {
  * Returns newest items first.
  */
 export async function getUserItems(telegramUserId: string): Promise<SavedItem[]> {
-  if (isFirestoreEnabled()) {
+  if (isSupabaseConfigured()) {
     try {
-      await autoMigrateToFirestoreIfNeeded();
-      return await getUserItemsFirestore(telegramUserId);
+      await autoMigrateToSupabaseIfNeeded();
+      return await getUserItemsSupabase(telegramUserId);
     } catch (err) {
-      console.error('[Firestore Error] getUserItems failed, falling back to local storage:', err);
+      console.error('[Supabase Error] getUserItems failed, checking local fallback:', err);
     }
   }
 
-  // Local JSON fallback
+  // Local JSON fallback (development only)
   const { items } = loadLocalDb();
   const userItems = items.filter(
     (item) => String(item.telegramUserId || '') === String(telegramUserId)
@@ -138,11 +141,11 @@ export async function findUserDuplicate(
 ): Promise<SavedItem | undefined> {
   if (!url || !telegramUserId) return undefined;
 
-  if (isFirestoreEnabled()) {
+  if (isSupabaseConfigured()) {
     try {
-      return await findUserDuplicateFirestore(telegramUserId, url);
+      return await findUserDuplicateSupabase(telegramUserId, url);
     } catch (err) {
-      console.error('[Firestore Error] findUserDuplicate failed, checking local:', err);
+      console.error('[Supabase Error] findUserDuplicate failed, checking local fallback:', err);
     }
   }
 
@@ -160,21 +163,20 @@ export async function findUserDuplicate(
 
 /**
  * Save an item with deduplication check per Telegram user.
- * In Cloud Run production: saved to Firestore.
+ * In production: saved to Supabase PostgreSQL with unique index constraint.
  * Fallback: local JSON database.
  */
 export async function saveUserItem(input: SaveItemInput): Promise<SaveItemResult> {
-  if (isFirestoreEnabled()) {
+  if (isSupabaseConfigured()) {
     try {
-      await autoMigrateToFirestoreIfNeeded();
-      const result = await saveUserItemFirestore(input);
-      return result;
+      await autoMigrateToSupabaseIfNeeded();
+      return await saveUserItemSupabase(input);
     } catch (err) {
-      console.error('[Firestore Error] saveUserItem failed, falling back to local:', err);
+      console.error('[Supabase Error] saveUserItem failed, falling back to local storage:', err);
     }
   }
 
-  // Local JSON storage
+  // Local JSON fallback (development only)
   const { items } = loadLocalDb();
   const telegramUserId = String(input.telegramUserId || '').trim();
 
@@ -211,11 +213,11 @@ export async function updateUserItem(
   updates: Partial<SavedItem>,
   telegramUserId?: string
 ): Promise<SavedItem | null> {
-  if (isFirestoreEnabled()) {
+  if (isSupabaseConfigured()) {
     try {
-      return await updateUserItemFirestore(id, updates, telegramUserId);
+      return await updateUserItemSupabase(id, updates, telegramUserId);
     } catch (err) {
-      console.error('[Firestore Error] updateUserItem failed, trying local:', err);
+      console.error('[Supabase Error] updateUserItem failed, trying local fallback:', err);
     }
   }
 
@@ -244,11 +246,11 @@ export async function updateUserItem(
  * Delete an item by ID
  */
 export async function deleteUserItem(id: string, telegramUserId?: string): Promise<boolean> {
-  if (isFirestoreEnabled()) {
+  if (isSupabaseConfigured()) {
     try {
-      return await deleteUserItemFirestore(id, telegramUserId);
+      return await deleteUserItemSupabase(id, telegramUserId);
     } catch (err) {
-      console.error('[Firestore Error] deleteUserItem failed, trying local:', err);
+      console.error('[Supabase Error] deleteUserItem failed, trying local fallback:', err);
     }
   }
 

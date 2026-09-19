@@ -9,7 +9,7 @@ export interface UrlPreviewResult {
   status: 'ready' | 'failed';
 }
 
-const MAX_HTML_BYTES = 512 * 1024; // 512 KB is plenty for <head> metadata
+const MAX_HTML_BYTES = 1024 * 1024; // 1 MB limit for <head> metadata
 const REQUEST_TIMEOUT_MS = 6000; // 6 seconds safe timeout
 
 /**
@@ -157,11 +157,12 @@ function decodeHtmlEntities(str: string): string {
 }
 
 /**
- * Resolves a potentially relative image URL against the page's base URL.
+ * Resolves a potentially relative image URL against the page's base URL,
+ * decoding any HTML entities first.
  */
 function resolveAbsoluteImageUrl(imgUrl: string, baseUrl: string): string | null {
   if (!imgUrl || !imgUrl.trim()) return null;
-  const raw = imgUrl.trim();
+  const raw = decodeHtmlEntities(imgUrl.trim());
 
   // Reject data URIs or non-http protocols
   if (raw.startsWith('data:') || raw.startsWith('javascript:')) {
@@ -177,6 +178,45 @@ function resolveAbsoluteImageUrl(imgUrl: string, baseUrl: string): string | null
   } catch {
     return null;
   }
+}
+
+/**
+ * Extracts a deterministic YouTube thumbnail URL (hqdefault.jpg) from YouTube URLs.
+ * Supported formats:
+ * - https://www.youtube.com/watch?v=VIDEO_ID
+ * - https://youtu.be/VIDEO_ID
+ * - https://www.youtube.com/shorts/VIDEO_ID
+ * - https://www.youtube.com/live/VIDEO_ID
+ * - https://m.youtube.com/watch?v=VIDEO_ID
+ */
+function extractYouTubeThumbnail(urlStr: string): string | null {
+  if (!urlStr || typeof urlStr !== 'string') return null;
+  try {
+    let clean = urlStr.trim();
+    if (!/^https?:\/\//i.test(clean)) {
+      clean = 'https://' + clean;
+    }
+    const u = new URL(clean);
+    const host = u.hostname.toLowerCase().replace(/^www\./, '');
+    let videoId: string | null = null;
+
+    if (host === 'youtube.com' || host === 'm.youtube.com') {
+      if (u.pathname === '/watch') {
+        videoId = u.searchParams.get('v');
+      } else if (u.pathname.startsWith('/shorts/') || u.pathname.startsWith('/live/')) {
+        const parts = u.pathname.split('/');
+        videoId = parts[2] || null;
+      }
+    } else if (host === 'youtu.be') {
+      videoId = u.pathname.slice(1).split('/')[0] || null;
+    }
+
+    if (videoId && /^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+      // Must strictly be HTTPS
+      return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+    }
+  } catch {}
+  return null;
 }
 
 /**
@@ -296,7 +336,7 @@ export async function fetchUrlPreview(rawUrl: string): Promise<UrlPreviewResult>
       method: 'GET',
       headers: {
         'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 (SnapKeep)',
+          'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php); TelegramBot',
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
       },
@@ -307,12 +347,32 @@ export async function fetchUrlPreview(rawUrl: string): Promise<UrlPreviewResult>
     clearTimeout(timeoutId);
 
     if (!response.ok) {
+      const ytFallback = extractYouTubeThumbnail(parsedUrl.toString()) || extractYouTubeThumbnail(rawUrl);
+      if (ytFallback) {
+        return {
+          title: null,
+          description: null,
+          imageUrl: ytFallback,
+          domain,
+          status: 'ready',
+        };
+      }
       return fallbackResult;
     }
 
     // 4. Validate Content-Type: must be HTML
     const contentType = (response.headers.get('content-type') || '').toLowerCase();
     if (!contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) {
+      const ytFallback = extractYouTubeThumbnail(parsedUrl.toString()) || extractYouTubeThumbnail(rawUrl);
+      if (ytFallback) {
+        return {
+          title: null,
+          description: null,
+          imageUrl: ytFallback,
+          domain,
+          status: 'ready',
+        };
+      }
       return fallbackResult;
     }
 
@@ -348,18 +408,39 @@ export async function fetchUrlPreview(rawUrl: string): Promise<UrlPreviewResult>
     const finalDomain = extractDomainFromUrl(finalUrl) || domain;
     const { title, description, imageUrl } = parseHtmlMetadata(html, finalUrl);
 
+    // Apply YouTube fallback if image was not found from og:image / twitter:image
+    const finalImageUrl =
+      imageUrl ||
+      extractYouTubeThumbnail(finalUrl) ||
+      extractYouTubeThumbnail(rawUrl) ||
+      null;
+
     // If we have at least a title, description, or image, mark status as ready
-    const hasData = Boolean((title && title.length > 0) || (description && description.length > 0) || imageUrl);
+    const hasData = Boolean(
+      (title && title.length > 0) ||
+      (description && description.length > 0) ||
+      finalImageUrl
+    );
 
     return {
       title: title || null,
       description: description || null,
-      imageUrl: imageUrl || null,
+      imageUrl: finalImageUrl,
       domain: finalDomain,
       status: hasData ? 'ready' : 'failed',
     };
   } catch (err: any) {
-    // Network error, abort/timeout, or TLS error -> graceful fallback
+    // Network error, abort/timeout, or TLS error -> check YouTube fallback or graceful fallback
+    const ytFallback = extractYouTubeThumbnail(parsedUrl.toString()) || extractYouTubeThumbnail(rawUrl);
+    if (ytFallback) {
+      return {
+        title: null,
+        description: null,
+        imageUrl: ytFallback,
+        domain,
+        status: 'ready',
+      };
+    }
     return fallbackResult;
   }
 }

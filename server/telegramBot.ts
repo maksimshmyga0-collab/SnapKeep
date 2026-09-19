@@ -3,7 +3,8 @@ import {
   type ExtractedUrlInfo,
   type TelegramMessagePayload,
 } from './urlExtractor.js';
-import { saveUserItem, type SaveItemResult } from './db.js';
+import { saveUserItem, updateUserItem, type SaveItemResult } from './db.js';
+import { fetchUrlPreview } from './urlPreview.js';
 import type { SavedItem } from './types.js';
 
 export const DEFAULT_APP_URL = 'https://snap-keep-omega.vercel.app';
@@ -287,6 +288,37 @@ export async function processTelegramUpdate(
   let deletedOriginalMessage = false;
   if (resolvedToken && message.message_id) {
     deletedOriginalMessage = await deleteTelegramMessage(resolvedToken, chatId, message.message_id);
+  }
+
+  // 3. Automatically fetch and update preview metadata for all newly saved URLs
+  // This runs after the user has received their instant confirmation and message is deleted.
+  // Errors or slow external sites never disrupt the Telegram bot response or existing saved items.
+  for (const item of newItems) {
+    if (item.url) {
+      try {
+        const preview = await fetchUrlPreview(item.url);
+        const updated = await updateUserItem(
+          item.id,
+          {
+            previewTitle: preview.title,
+            previewDescription: preview.description,
+            previewImageUrl: preview.imageUrl,
+            previewDomain: preview.domain,
+            previewStatus: preview.status,
+          },
+          telegramUserId
+        );
+        if (updated) {
+          item.previewTitle = updated.previewTitle;
+          item.previewDescription = updated.previewDescription;
+          item.previewImageUrl = updated.previewImageUrl;
+          item.previewDomain = updated.previewDomain;
+          item.previewStatus = updated.previewStatus;
+        }
+      } catch (err) {
+        console.warn('[Telegram Bot] Error fetching preview for URL:', item.url, err);
+      }
+    }
   }
 
   return {

@@ -9,7 +9,7 @@ import {
   type SaveItemInput,
   type SaveItemResult,
 } from './supabase.js';
-import { normalizeUrlForComparison } from './urlUtils.js';
+import { normalizeUrlForComparison, extractDomainFromUrl } from './urlUtils.js';
 
 export type { SaveItemInput, SaveItemResult };
 
@@ -83,6 +83,11 @@ export async function saveUserItem(input: SaveItemInput): Promise<SaveItemResult
     category: input.category || 'Разное',
     textContent: input.textContent || undefined,
     createdAt: input.createdAt || new Date().toISOString(),
+    previewTitle: input.previewTitle ?? null,
+    previewDescription: input.previewDescription ?? null,
+    previewImageUrl: input.previewImageUrl ?? null,
+    previewDomain: input.previewDomain ?? (input.url ? extractDomainFromUrl(input.url) : null),
+    previewStatus: input.previewStatus || (input.url ? 'pending' : 'failed'),
   };
 
   const userItems = getMemoryItems(telegramUserId);

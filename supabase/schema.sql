@@ -14,7 +14,12 @@ CREATE TABLE IF NOT EXISTS public.items (
   source_label TEXT NOT NULL DEFAULT 'ссылка',
   category TEXT NOT NULL DEFAULT 'Разное',
   text_content TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+  created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+  preview_title TEXT,
+  preview_description TEXT,
+  preview_image_url TEXT,
+  preview_domain TEXT,
+  preview_status TEXT NOT NULL DEFAULT 'pending'
 );
 
 -- 2. Index for fast querying user items ordered by newest first

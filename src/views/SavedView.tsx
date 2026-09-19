@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { SavedItem } from '../types';
 import { triggerHaptic } from '../services/telegram';
+import { ItemCard } from '../components/ItemCard';
 
 interface SavedViewProps {
   items: SavedItem[];
@@ -30,30 +31,15 @@ export const SavedView: React.FC<SavedViewProps> = ({
     const q = searchQuery.toLowerCase();
     return (
       item.title.toLowerCase().includes(q) ||
+      (item.previewTitle && item.previewTitle.toLowerCase().includes(q)) ||
+      (item.previewDescription && item.previewDescription.toLowerCase().includes(q)) ||
+      (item.previewDomain && item.previewDomain.toLowerCase().includes(q)) ||
       item.category.toLowerCase().includes(q) ||
       item.sourceLabel.toLowerCase().includes(q) ||
-      (item.textContent && item.textContent.toLowerCase().includes(q))
+      (item.textContent && item.textContent.toLowerCase().includes(q)) ||
+      (item.url && item.url.toLowerCase().includes(q))
     );
   });
-
-  // Highlight matching search text
-  const renderHighlightedText = (text: string, query: string) => {
-    if (!query.trim()) return text;
-    const parts = text.split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
-    return (
-      <>
-        {parts.map((part, index) =>
-          part.toLowerCase() === query.toLowerCase() ? (
-            <span key={index} style={{ color: '#8FA3DE', fontWeight: 500 }}>
-              {part}
-            </span>
-          ) : (
-            <span key={index}>{part}</span>
-          )
-        )}
-      </>
-    );
-  };
 
   return (
     <div
@@ -146,69 +132,12 @@ export const SavedView: React.FC<SavedViewProps> = ({
           </div>
         ) : (
           filteredItems.map((item) => (
-            <div
+            <ItemCard
               key={item.id}
-              onClick={() => {
-                triggerHaptic('light');
-                onSelectItem(item);
-              }}
-              className="rounded-2xl p-3.5 flex items-center gap-3 cursor-pointer transition-all active:opacity-85 matte-tile"
-            >
-              {/* Small Type Icon (34px) */}
-              <div
-                className="w-[34px] h-[34px] rounded-xl shrink-0 flex items-center justify-center"
-                style={{
-                  backgroundColor: 'rgba(90, 109, 166, 0.22)',
-                  border: '1px solid rgba(140, 157, 214, 0.28)',
-                  color: '#C8D2F0',
-                }}
-              >
-                {item.sourceKind === 'video' ? (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="5 3 19 12 5 21 5 3" />
-                  </svg>
-                ) : item.sourceKind === 'note' ? (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 20h9" />
-                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                  </svg>
-                ) : (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                  </svg>
-                )}
-              </div>
-
-              {/* Title & Metadata */}
-              <div className="flex-1 min-w-0 pr-1">
-                <div
-                  className="text-[#F2F3F5] text-[13.5px] font-normal leading-snug line-clamp-2 mb-0.5"
-                >
-                  {renderHighlightedText(item.title, searchQuery)}
-                </div>
-                <div
-                  className="text-[#6C717A] text-[12px] font-normal leading-none"
-                >
-                  {item.category} · {item.sourceLabel}
-                </div>
-              </div>
-
-              {/* Subtle chevron */}
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#5C6068"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="shrink-0 ml-1"
-              >
-                <polyline points="9 18 15 12 9 6" />
-              </svg>
-            </div>
+              item={item}
+              searchQuery={searchQuery}
+              onOpenDetails={onSelectItem}
+            />
           ))
         )}
       </div>

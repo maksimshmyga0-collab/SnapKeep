@@ -27,4 +27,9 @@ export interface SavedItem {
   category: CategoryName;
   textContent?: string;
   createdAt: string;
+  previewTitle?: string | null;
+  previewDescription?: string | null;
+  previewImageUrl?: string | null;
+  previewDomain?: string | null;
+  previewStatus?: 'pending' | 'ready' | 'failed';
 }

@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { SavedItem, CategoryName, SourceKind } from './types.js';
-import { normalizeUrlForComparison } from './urlUtils.js';
+import { normalizeUrlForComparison, extractDomainFromUrl } from './urlUtils.js';
 
 export interface SaveItemInput {
   telegramUserId: string;
@@ -11,6 +11,11 @@ export interface SaveItemInput {
   category?: CategoryName;
   textContent?: string;
   createdAt?: string;
+  previewTitle?: string | null;
+  previewDescription?: string | null;
+  previewImageUrl?: string | null;
+  previewDomain?: string | null;
+  previewStatus?: 'pending' | 'ready' | 'failed';
 }
 
 export interface SaveItemResult {
@@ -29,6 +34,11 @@ interface ItemRow {
   category: string;
   text_content: string | null;
   created_at: string;
+  preview_title?: string | null;
+  preview_description?: string | null;
+  preview_image_url?: string | null;
+  preview_domain?: string | null;
+  preview_status?: string | null;
 }
 
 let supabaseClient: SupabaseClient | null = null;
@@ -81,6 +91,11 @@ function mapRowToSavedItem(row: ItemRow): SavedItem {
     category: (row.category as CategoryName) || 'Разное',
     textContent: row.text_content || undefined,
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+    previewTitle: row.preview_title ?? null,
+    previewDescription: row.preview_description ?? null,
+    previewImageUrl: row.preview_image_url ?? null,
+    previewDomain: row.preview_domain ?? (row.url ? extractDomainFromUrl(row.url) : null),
+    previewStatus: (row.preview_status as 'pending' | 'ready' | 'failed') || (row.url ? 'pending' : 'failed'),
   };
 }
 
@@ -167,6 +182,11 @@ export async function saveUserItemSupabase(input: SaveItemInput): Promise<SaveIt
     category: input.category || 'Разное',
     text_content: input.textContent || null,
     created_at: input.createdAt || new Date().toISOString(),
+    preview_title: input.previewTitle ?? null,
+    preview_description: input.previewDescription ?? null,
+    preview_image_url: input.previewImageUrl ?? null,
+    preview_domain: input.previewDomain ?? (input.url ? extractDomainFromUrl(input.url) : null),
+    preview_status: input.previewStatus || (input.url ? 'pending' : 'failed'),
   };
 
   const { data, error } = await client
@@ -213,6 +233,11 @@ export async function updateUserItemSupabase(
   }
   if (updates.sourceKind !== undefined) updatePayload.source_kind = updates.sourceKind;
   if (updates.sourceLabel !== undefined) updatePayload.source_label = updates.sourceLabel;
+  if (updates.previewTitle !== undefined) updatePayload.preview_title = updates.previewTitle;
+  if (updates.previewDescription !== undefined) updatePayload.preview_description = updates.previewDescription;
+  if (updates.previewImageUrl !== undefined) updatePayload.preview_image_url = updates.previewImageUrl;
+  if (updates.previewDomain !== undefined) updatePayload.preview_domain = updates.previewDomain;
+  if (updates.previewStatus !== undefined) updatePayload.preview_status = updates.previewStatus;
 
   let query = client.from('items').update(updatePayload).eq('id', id);
   if (telegramUserId) {

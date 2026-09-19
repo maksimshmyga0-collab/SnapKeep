@@ -91,10 +91,30 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
         </button>
       </div>
 
+        {/* Optional Preview Image */}
+        {item.previewImageUrl && (
+          <div className="w-full h-[140px] rounded-xl overflow-hidden mb-3 bg-[#121418] border border-[rgba(255,255,255,0.06)]">
+            <img
+              src={item.previewImageUrl}
+              alt={item.previewTitle || item.title}
+              className="w-full h-full object-cover"
+              loading="lazy"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+        )}
+
         {/* Title */}
-        <h3 className="text-[16px] text-[#F2F3F5] font-medium leading-snug mb-3">
-          {item.title}
+        <h3 className="text-[16px] text-[#F2F3F5] font-medium leading-snug mb-2">
+          {item.previewTitle || item.title}
         </h3>
+
+        {/* Preview Description */}
+        {item.previewDescription && (
+          <p className="text-[13px] text-[#8E939C] leading-relaxed mb-3">
+            {item.previewDescription}
+          </p>
+        )}
 
         {/* URL or Text Content */}
         {item.url && (
@@ -102,6 +122,9 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
             className="p-3 rounded-xl mb-3 break-all text-[13px] text-[#8E939C] flex items-center justify-between gap-2 matte-tile"
           >
             <span className="truncate">{item.url}</span>
+            {item.previewDomain && (
+              <span className="text-[11px] text-[#6C717A] shrink-0">{item.previewDomain}</span>
+            )}
           </div>
         )}
 

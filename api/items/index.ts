@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getUserItems, saveUserItem } from '../../server/db.js';
+import { getUserItems, saveUserItem, updateUserItem } from '../../server/db.js';
+import { fetchUrlPreview } from '../../server/urlPreview.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -35,6 +36,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'telegramUserId is required' });
       }
 
+      // 1. First, reliably save the item in database (guaranteed save)
       const result = await saveUserItem({
         telegramUserId: String(telegramUserId),
         url,
@@ -45,6 +47,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         textContent,
         createdAt,
       });
+
+      // 2. If this is a new URL, attempt to fetch preview metadata
+      if (!result.isDuplicate && result.item.url) {
+        try {
+          const preview = await fetchUrlPreview(result.item.url);
+          const updated = await updateUserItem(
+            result.item.id,
+            {
+              previewTitle: preview.title,
+              previewDescription: preview.description,
+              previewImageUrl: preview.imageUrl,
+              previewDomain: preview.domain,
+              previewStatus: preview.status,
+            },
+            String(telegramUserId)
+          );
+          if (updated) {
+            result.item = updated;
+          }
+        } catch (err) {
+          console.warn('[Vercel API] Preview fetch non-blocking warning:', err);
+        }
+      }
 
       return res.status(200).json(result);
     }

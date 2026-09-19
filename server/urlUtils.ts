@@ -62,3 +62,21 @@ export function normalizeUrlForComparison(rawUrl: string): string {
     return cleaned.toLowerCase().replace(/\/+$/, '');
   }
 }
+
+/**
+ * Extracts a clean display domain from a URL (e.g. "youtube.com", "github.com").
+ */
+export function extractDomainFromUrl(rawUrl?: string | null): string {
+  if (!rawUrl) return '';
+  let cleaned = rawUrl.trim();
+  if (!cleaned) return '';
+  if (!/^https?:\/\//i.test(cleaned)) {
+    cleaned = 'https://' + cleaned;
+  }
+  try {
+    const u = new URL(cleaned);
+    return u.hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
